@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* --- Saffron & Smoke Color System --- */
+  --color-on-surface-variant: #c4c7c7;
+  --color-on-tertiary: #003053;
+  --color-surface-dim: #0e0e0e;
+  --color-primary-fixed: #00f4fe;
+  --color-on-tertiary-container: #002440;
+  --color-on-surface: #ffffff;
+  --color-surface-container: #1a1a1a;
+  --color-on-primary-fixed: #004346;
+  --color-outline-variant: #484847;
+  --color-on-primary-fixed-variant: #006266;
+  --color-surface-bright: #2c2c2c;
+  --color-on-tertiary-fixed: #00192f;
+  --color-surface-container-lowest: #000000;
+  --color-on-error-container: #ffa8a3;
+  --color-surface: #0e0e0e;
+  --color-error-dim: #d7383b;
+  --color-background: #0e0e0e;
+  --color-tertiary-container: #45a6fa;
+  --color-on-secondary: #280067;
+  --color-secondary-container: #5516be;
+  --color-on-primary-container: #00575b;
+  --color-surface-container-highest: #262626;
+  --color-tertiary: #64b3ff;
+  --color-primary: #a1faff;
+  --color-secondary-fixed: #dac9ff;
+  --color-primary-container: #00f4fe;
+  --color-on-background: #ffffff;
+  --color-primary-fixed-dim: #00e5ee;
+  --color-surface-tint: #a1faff;
+  --color-primary-dim: #00e5ee;
+  --color-tertiary-dim: #41a3f7;
+  --color-secondary-fixed-dim: #ceb9ff;
+  --color-error: #ff716c;
+  --color-secondary: #ac8aff;
+  --color-tertiary-fixed-dim: #49a8fc;
+  --color-on-secondary-fixed: #40009b;
+  --color-outline: #767575;
+  --color-on-error: #490006;
+  --color-error-container: #9f0519;
+  --color-surface-container-low: #131313;
+  --color-inverse-surface: #fcf9f8;
+  --color-inverse-primary: #006a6e;
+  --color-on-secondary-fixed-variant: #5f28c8;
+  --color-inverse-on-surface: #565555;
+  --color-surface-container-high: #20201f;
+  --color-on-secondary-container: #d9c8ff;
+  --color-secondary-dim: #8455ef;
+  --color-on-primary: #006165;
+  --color-tertiary-fixed: #6bb6ff;
+  --color-on-tertiary-fixed-variant: #003c65;
+  --color-surface-variant: #262626;
+
+  /* --- Border Radius --- */
+  --radius: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+
+  /* --- Fonts --- */
+  --font-headline: "Manrope", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-label: "Inter", sans-serif;
+}
+
+body {
+  background-color: #0e0e0e;
+  color: #ffffff;
+  font-family: var(--font-body);
+  min-height: 100dvh;
+}
+
+.glass-panel {
+  background: rgba(26, 26, 26, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.oracle-glow {
+  background:
+    radial-gradient(1200px 600px at 0% -20%, rgba(0, 106, 110, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% 110%, rgba(85, 22, 190, 0.16), transparent 60%),
+    radial-gradient(800px 400px at 50% 0%, rgba(161, 250, 255, 0.04), transparent 70%),
+    #0a0a0b;
+  min-height: 100dvh;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.message-bubble {
+  max-width: 88%;
+  word-wrap: break-word;
+}
+
+/* --- Print: show ONLY the receipt, hide the rest of the app ------------ */
+
+/* On screen the receipt area is not rendered; it only exists so the browser
+   can print it. */
+.receipt-print-area {
+  display: none;
+}
+
+@media print {
+  /* Hide everything that isn't the receipt. */
+  body * {
+    visibility: hidden;
+  }
+  .receipt-print-area,
+  .receipt-print-area * {
+    visibility: visible;
+  }
+  .receipt-print-area {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #000 !important;
+    background: #fff !important;
+  }
+  /* Use A5 (standard small-bill size in India) with tight margins. */
+  @page {
+    size: A5 portrait;
+    margin: 8mm;
+  }
+}
