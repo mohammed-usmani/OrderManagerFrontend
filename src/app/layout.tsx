@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { VoiceAgentProvider } from "@/contexts/VoiceAgentContext";
+import { BackendStatusGate } from "@/components/BackendStatusGate";
 
 export const metadata: Metadata = {
   title: "Saffron & Smoke",
@@ -23,7 +24,9 @@ export default function RootLayout({
       </head>
       <body className="flex flex-col oracle-glow selection:bg-primary selection:text-on-primary">
         <AuthProvider>
-          <VoiceAgentProvider>{children}</VoiceAgentProvider>
+          <VoiceAgentProvider>
+            <BackendStatusGate>{children}</BackendStatusGate>
+          </VoiceAgentProvider>
         </AuthProvider>
       </body>
     </html>

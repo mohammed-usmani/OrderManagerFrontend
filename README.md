@@ -106,8 +106,9 @@ npm run dev
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | REST base |
 | `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000/ws` | voice WS |
+| `NEXT_PUBLIC_SHOW_WAKE_UP_GATE` | `0` | Set to `1` while the backend runs on Render's free plan. Shows a full-screen countdown until `GET /health` responds so users aren't staring at errors during the ~50 s cold-start. Remove the flag (or the entire `BackendStatusGate` component) once the backend is on an always-on plan. |
 
-Both are read client-side; change them and restart `next dev` to pick up.
+All three are read client-side; change them and restart `next dev` to pick up.
 
 ---
 
