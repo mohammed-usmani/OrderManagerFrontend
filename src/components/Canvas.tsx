@@ -317,17 +317,28 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
   }
 
   if (canvas.kind === "session_end") {
+    const isTimeLimit = canvas.reason === "time_limit";
+    const isRateLimit = canvas.reason === "rate_limit";
+    const icon = isTimeLimit ? "timer_off" : isRateLimit ? "hourglass_top" : "waving_hand";
+    const title = isTimeLimit
+      ? "That’s the call limit"
+      : isRateLimit
+        ? "Just a moment"
+        : "Until next time";
+    const tone = isTimeLimit || isRateLimit ? "text-primary" : "text-tertiary";
+    const message =
+      canvas.message ?? "Tap the mic below whenever you’re hungry again.";
     return (
       <section className="flex flex-col items-center justify-center py-24 text-center gap-4 reveal">
         <div className="w-16 h-16 rounded-full ember-card flex items-center justify-center">
-          <span className="material-symbols-outlined text-tertiary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-            waving_hand
+          <span className={`material-symbols-outlined ${tone} text-3xl`} style={{ fontVariationSettings: "'FILL' 1" }}>
+            {icon}
           </span>
         </div>
         <div>
-          <h3 className="font-headline font-semibold text-on-surface text-2xl">Until next time</h3>
-          <p className="text-on-surface-variant text-sm max-w-sm mt-2 leading-relaxed">
-            Tap the mic below whenever you’re hungry again.
+          <h3 className="font-headline font-semibold text-on-surface text-2xl">{title}</h3>
+          <p className="text-on-surface-variant text-sm max-w-md mt-2 leading-relaxed">
+            {message}
           </p>
         </div>
       </section>

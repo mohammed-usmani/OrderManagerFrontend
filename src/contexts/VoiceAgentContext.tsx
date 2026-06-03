@@ -120,7 +120,7 @@ export type CanvasState =
       serviceable: boolean;
       matched: string | null;
     }
-  | { kind: "session_end"; reason: string };
+  | { kind: "session_end"; reason: string; message?: string };
 
 // --- Context -----------------------------------------------------------
 
@@ -131,6 +131,9 @@ interface VoiceAgentContextValue {
   transcript: TranscriptEntry[];
   canvas: CanvasState;
   isVoiceActive: boolean;
+  /** Seconds left before the call's hard time cap, once the backend warns
+   *  (~1 min out). null when not in the warning window. */
+  warningSecondsLeft: number | null;
   disconnectVoice: () => void;
   toggleVoice: () => Promise<void>;
   clearCanvas: () => void;
@@ -164,11 +167,39 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [canvas, setCanvas] = useState<CanvasState>({ kind: "idle" });
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [warningSecondsLeft, setWarningSecondsLeft] = useState<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<{ stop: () => void } | null>(null);
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const endTimerRef = useRef<number | null>(null);
+  const warnTimerRef = useRef<number | null>(null);
+
+  const clearWarning = useCallback(() => {
+    if (warnTimerRef.current !== null) {
+      clearInterval(warnTimerRef.current);
+      warnTimerRef.current = null;
+    }
+    setWarningSecondsLeft(null);
+  }, []);
+
+  const startWarningCountdown = useCallback((seconds: number) => {
+    if (warnTimerRef.current !== null) clearInterval(warnTimerRef.current);
+    setWarningSecondsLeft(seconds);
+    warnTimerRef.current = window.setInterval(() => {
+      setWarningSecondsLeft((s) => {
+        if (s === null) return null;
+        if (s <= 1) {
+          if (warnTimerRef.current !== null) {
+            clearInterval(warnTimerRef.current);
+            warnTimerRef.current = null;
+          }
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }, []);
 
   const addTranscript = useCallback(
     (role: "user" | "assistant", text: string) => {
@@ -275,9 +306,19 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           });
           break;
         }
+        case "time_warning": {
+          const secs = (data as { seconds_left?: number })?.seconds_left ?? 60;
+          startWarningCountdown(secs);
+          break;
+        }
         case "session_end": {
-          const reason = ((data as { reason?: string })?.reason) ?? "goodbye";
-          setCanvas({ kind: "session_end", reason });
+          const d = (data as { reason?: string; message?: string }) ?? {};
+          clearWarning();
+          setCanvas({
+            kind: "session_end",
+            reason: d.reason ?? "goodbye",
+            message: d.message,
+          });
           scheduleEndAfterAudio();
           break;
         }
@@ -286,7 +327,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           break;
       }
     },
-    [scheduleEndAfterAudio]
+    [scheduleEndAfterAudio, startWarningCountdown, clearWarning]
   );
 
   const handleMessage = useCallback(
@@ -315,6 +356,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   // --- Voice connection ------------------------------------------------
 
   const disconnectVoice = useCallback(() => {
+    clearWarning();
     if (endTimerRef.current !== null) {
       clearTimeout(endTimerRef.current);
       endTimerRef.current = null;
@@ -327,7 +369,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     wsRef.current = null;
     setIsVoiceActive(false);
     setStatus("disconnected");
-  }, []);
+  }, [clearWarning]);
 
   const startMic = useCallback(async () => {
     const mic = await startMicCapture((pcmChunk) => {
@@ -372,7 +414,8 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       await startMic();
     };
     ws.onmessage = handleMessage;
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      clearWarning();
       setStatus("disconnected");
       setIsVoiceActive(false);
       micRef.current?.stop();
@@ -380,9 +423,20 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       playerRef.current?.stop();
       playerRef.current = null;
       wsRef.current = null;
+      // 4003 = server rejected the connection (per-IP cooldown / one-call-at-a-
+      // time). Show the reason the server sent so it's clearly a demo limit.
+      if (event.code === 4003) {
+        setCanvas({
+          kind: "session_end",
+          reason: "rate_limit",
+          message:
+            event.reason ||
+            "You've reached the demo limit — please wait a moment and try again.",
+        });
+      }
     };
     ws.onerror = () => ws.close();
-  }, [isVoiceActive, startMic, handleMessage, token, disconnectVoice]);
+  }, [isVoiceActive, startMic, handleMessage, token, disconnectVoice, clearWarning]);
 
   useEffect(() => {
     return () => {
@@ -400,6 +454,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     transcript,
     canvas,
     isVoiceActive,
+    warningSecondsLeft,
     disconnectVoice,
     toggleVoice,
     clearCanvas,

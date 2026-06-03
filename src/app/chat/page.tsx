@@ -37,7 +37,8 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user, router]);
 
-  const { status, canvas, isVoiceActive, toggleVoice } = useVoiceAgent();
+  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft } =
+    useVoiceAgent();
 
   const isConnecting = status === "connecting";
   const isIdle = canvas.kind === "idle";
@@ -93,6 +94,21 @@ export default function ChatPage() {
           <div className="absolute inset-x-0 -top-20 h-20 bg-gradient-to-t from-[#14100c] via-[#14100c]/85 to-transparent pointer-events-none" />
 
           <div className="flex flex-col items-center gap-2 py-4 md:py-6 bg-[#14100c]/85 backdrop-blur-xl border-t border-white/5">
+            {warningSecondsLeft !== null && (
+              <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary reveal-sm">
+                <span
+                  className="material-symbols-outlined text-[15px]"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  timer
+                </span>
+                Call ends in{" "}
+                <span className="font-mono tabular-nums">
+                  {Math.floor(warningSecondsLeft / 60)}:
+                  {String(warningSecondsLeft % 60).padStart(2, "0")}
+                </span>
+              </div>
+            )}
             <button
               onClick={toggleVoice}
               disabled={isConnecting}
