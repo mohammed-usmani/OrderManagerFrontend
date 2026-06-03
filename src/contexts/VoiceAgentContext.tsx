@@ -149,6 +149,8 @@ interface VoiceAgentContextValue {
   transcript: TranscriptEntry[];
   canvas: CanvasState;
   isVoiceActive: boolean;
+  /** True while waiting in the queue for a free voice slot (all busy). */
+  queued: boolean;
   /** Seconds left before the call's hard time cap, once the backend warns
    *  (~1 min out). null when not in the warning window. */
   warningSecondsLeft: number | null;
@@ -186,6 +188,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const [canvas, setCanvas] = useState<CanvasState>({ kind: "idle" });
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [warningSecondsLeft, setWarningSecondsLeft] = useState<number | null>(null);
+  const [queued, setQueued] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<{ stop: () => void } | null>(null);
@@ -193,6 +196,22 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const endTimerRef = useRef<number | null>(null);
   const warnTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  // Queue state: when all global slots are busy the server rejects with 4003
+  // and we auto-retry until one frees up.
+  const retryTimerRef = useRef<number | null>(null);
+  const queueAttemptsRef = useRef(0);
+  const queuedRef = useRef(false);
+  const connectRef = useRef<() => Promise<void>>(async () => {});
+
+  const cancelQueue = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    queuedRef.current = false;
+    queueAttemptsRef.current = 0;
+    setQueued(false);
+  }, []);
 
   // Close the shared AudioContext (capture + playback share one, created inside
   // the user's tap so iOS/Safari actually unlocks audio).
@@ -386,6 +405,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
 
   const disconnectVoice = useCallback(() => {
     clearWarning();
+    cancelQueue();
     if (endTimerRef.current !== null) {
       clearTimeout(endTimerRef.current);
       endTimerRef.current = null;
@@ -399,29 +419,26 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     wsRef.current = null;
     setIsVoiceActive(false);
     setStatus("disconnected");
-  }, [clearWarning, closeAudioContext]);
+  }, [clearWarning, closeAudioContext, cancelQueue]);
 
   const startMic = useCallback(async (audioCtx: AudioContext) => {
     const mic = await startMicCapture((pcmChunk) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        const frame = encodeAudioFrame(pcmChunk, 16000, 1);
-        wsRef.current.send(frame);
-      }
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+      // Half-duplex: while Arjun is speaking, DON'T send mic audio upstream.
+      // Otherwise the speakers feed his own voice back into the mic, Gemini
+      // hears itself, the turn never ends, and he talks over himself in a loop.
+      // (Browser echo-cancellation isn't reliable across devices/speakers.)
+      const botSpeaking = (playerRef.current?.timeRemaining() ?? 0) > 0.12;
+      if (botSpeaking) return;
+      wsRef.current.send(encodeAudioFrame(pcmChunk, 16000, 1));
     }, audioCtx);
     micRef.current = mic;
     setIsVoiceActive(true);
     setStatus("listening");
   }, []);
 
-  const toggleVoice = useCallback(async () => {
-    // One control: tapping the mic while the call is live ends the whole
-    // session (closes WS, stops mic + playback). Tapping from idle connects
-    // and starts listening.
-    if (isVoiceActive || wsRef.current) {
-      disconnectVoice();
-      return;
-    }
-
+  // Opens a connection attempt (used for the initial tap and for queue retries).
+  const connect = useCallback(async () => {
     setStatus("connecting");
 
     // Create + resume the AudioContext NOW, synchronously inside the tap
@@ -467,6 +484,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       try {
         playerRef.current = createAudioPlayer(ctx, 24000);
         await startMic(ctx);
+        cancelQueue(); // got a slot — clear any queue state
       } catch (err) {
         // Mic denied, no mic, or an in-app/webview browser that blocks getUserMedia.
         const name = (err as { name?: string })?.name;
@@ -491,33 +509,65 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       playerRef.current = null;
       closeAudioContext();
       wsRef.current = null;
-      // 4003 = server rejected the connection (per-IP cooldown / one-call-at-a-
-      // time). Show the reason the server sent so it's clearly a demo limit.
+      // 4003 = all global voice slots are busy. Queue: auto-retry until one
+      // frees up (the Gemini free tier allows only a few concurrent sessions).
       if (event.code === 4003) {
-        setCanvas({
-          kind: "session_end",
-          reason: "rate_limit",
-          message:
-            event.reason ||
-            "You've reached the demo limit — please wait a moment and try again.",
-        });
+        const MAX_RETRIES = 10;
+        const DELAY_MS = 4000;
+        if (queueAttemptsRef.current < MAX_RETRIES) {
+          queueAttemptsRef.current += 1;
+          queuedRef.current = true;
+          setQueued(true);
+          setStatus("connecting");
+          setCanvas({
+            kind: "session_end",
+            reason: "busy",
+            message:
+              "All voice lines are busy right now — you're in the queue, we'll connect you the moment one frees up.",
+          });
+          retryTimerRef.current = window.setTimeout(() => {
+            retryTimerRef.current = null;
+            if (queuedRef.current) {
+              queuedRef.current = false;
+              setQueued(false);
+              connectRef.current();
+            }
+          }, DELAY_MS);
+        } else {
+          cancelQueue();
+          setCanvas({
+            kind: "session_end",
+            reason: "busy",
+            message:
+              "Still busy after a while — please try again in a few minutes.",
+          });
+        }
       }
     };
     ws.onerror = () => ws.close();
-  }, [
-    isVoiceActive,
-    startMic,
-    handleMessage,
-    token,
-    disconnectVoice,
-    clearWarning,
-    closeAudioContext,
-  ]);
+  }, [startMic, handleMessage, token, disconnectVoice, clearWarning, closeAudioContext, cancelQueue]);
+
+  // Keep a stable ref so queue retries can re-invoke the latest connect().
+  connectRef.current = connect;
+
+  const toggleVoice = useCallback(async () => {
+    // One control: tapping while a call is live (or while queued/connecting)
+    // cancels everything. Tapping from idle starts a fresh attempt.
+    if (isVoiceActive || wsRef.current || queuedRef.current || status === "connecting") {
+      disconnectVoice();
+      return;
+    }
+    queueAttemptsRef.current = 0;
+    await connect();
+  }, [isVoiceActive, status, disconnectVoice, connect]);
 
   useEffect(() => {
     return () => {
       if (endTimerRef.current !== null) {
         clearTimeout(endTimerRef.current);
+      }
+      if (retryTimerRef.current !== null) {
+        clearTimeout(retryTimerRef.current);
       }
       wsRef.current?.close();
       micRef.current?.stop();
@@ -534,6 +584,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     transcript,
     canvas,
     isVoiceActive,
+    queued,
     warningSecondsLeft,
     disconnectVoice,
     toggleVoice,

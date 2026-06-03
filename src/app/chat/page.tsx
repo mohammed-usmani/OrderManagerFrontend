@@ -37,12 +37,15 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user, router]);
 
-  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft } =
+  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued } =
     useVoiceAgent();
 
   const isConnecting = status === "connecting";
   const isIdle = canvas.kind === "idle";
   const live = isVoiceActive || status === "speaking";
+  const statusText = queued
+    ? "In queue — tap to cancel"
+    : STATUS_LABEL[status];
   // Short, single-focus states read better vertically centered; lists/menus
   // stay top-aligned so they can scroll naturally.
   const centered =
@@ -52,11 +55,13 @@ export default function ChatPage() {
     canvas.kind === "delivery_check" ||
     canvas.kind === "session_end";
 
-  const micIcon = isVoiceActive
-    ? "mic"
-    : isConnecting
-      ? "progress_activity"
-      : "mic_none";
+  const micIcon = queued
+    ? "hourglass_top"
+    : isVoiceActive
+      ? "mic"
+      : isConnecting
+        ? "progress_activity"
+        : "mic_none";
 
   return (
     <AppShell>
@@ -73,7 +78,7 @@ export default function ChatPage() {
           >
             graphic_eq
           </span>
-          <span className="text-xs uppercase tracking-[0.18em]">{STATUS_LABEL[status]}</span>
+          <span className="text-xs uppercase tracking-[0.18em]">{statusText}</span>
         </div>
       </div>
 
@@ -114,8 +119,8 @@ export default function ChatPage() {
             )}
             <button
               onClick={toggleVoice}
-              disabled={isConnecting}
-              aria-label={STATUS_LABEL[status]}
+              disabled={isConnecting && !queued}
+              aria-label={statusText}
               className={`
                 relative flex items-center justify-center
                 w-[88px] h-[88px] rounded-full
@@ -135,14 +140,14 @@ export default function ChatPage() {
                 <span className="absolute inset-0 rounded-full bg-primary/40 animate-ping" />
               )}
               <span
-                className={`material-symbols-outlined text-[38px] relative z-10 ${isConnecting ? "animate-spin" : ""}`}
+                className={`material-symbols-outlined text-[38px] relative z-10 ${isConnecting && !queued ? "animate-spin" : ""}`}
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {micIcon}
               </span>
             </button>
             <span className="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant md:hidden">
-              {STATUS_LABEL[status]}
+              {statusText}
             </span>
           </div>
         </div>
