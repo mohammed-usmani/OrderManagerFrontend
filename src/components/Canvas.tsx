@@ -319,13 +319,23 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
   if (canvas.kind === "session_end") {
     const isTimeLimit = canvas.reason === "time_limit";
     const isRateLimit = canvas.reason === "rate_limit";
-    const icon = isTimeLimit ? "timer_off" : isRateLimit ? "hourglass_top" : "waving_hand";
+    const isMicError = canvas.reason === "mic_error";
+    const icon = isTimeLimit
+      ? "timer_off"
+      : isRateLimit
+        ? "hourglass_top"
+        : isMicError
+          ? "mic_off"
+          : "waving_hand";
     const title = isTimeLimit
       ? "That’s the call limit"
       : isRateLimit
         ? "Just a moment"
-        : "Until next time";
-    const tone = isTimeLimit || isRateLimit ? "text-primary" : "text-tertiary";
+        : isMicError
+          ? "Microphone needed"
+          : "Until next time";
+    const tone =
+      isTimeLimit || isRateLimit || isMicError ? "text-primary" : "text-tertiary";
     const message =
       canvas.message ?? "Tap the mic below whenever you’re hungry again.";
     return (

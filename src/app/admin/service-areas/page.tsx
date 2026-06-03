@@ -93,7 +93,7 @@ export default function AdminServiceAreasPage() {
           }
         />
 
-        <main className="flex-1 overflow-y-auto px-4 md:px-8 py-4 max-w-[1600px] mx-auto w-full">
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-28 md:pb-8 max-w-[1600px] mx-auto w-full">
           <p className="mb-3 text-xs text-ink-soft">
             The voice agent only accepts delivery orders to areas listed here. It
             matches a caller's spoken locality or 6-digit pincode against the name,

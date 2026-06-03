@@ -126,6 +126,24 @@ export type CanvasState =
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
+/**
+ * Stable per-browser id for session-based rate limiting (so different people
+ * never block each other, but one browser can't open many concurrent calls).
+ * Persisted in localStorage; shared across tabs of the same browser profile.
+ */
+function getClientId(): string {
+  try {
+    let id = localStorage.getItem("voiceClientId");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("voiceClientId", id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID(); // ephemeral fallback (private mode / no storage)
+  }
+}
+
 interface VoiceAgentContextValue {
   status: AgentStatus;
   transcript: TranscriptEntry[];
@@ -174,6 +192,16 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const endTimerRef = useRef<number | null>(null);
   const warnTimerRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Close the shared AudioContext (capture + playback share one, created inside
+  // the user's tap so iOS/Safari actually unlocks audio).
+  const closeAudioContext = useCallback(() => {
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+  }, []);
 
   const clearWarning = useCallback(() => {
     if (warnTimerRef.current !== null) {
@@ -246,6 +274,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           micRef.current = null;
           playerRef.current?.stop();
           playerRef.current = null;
+          closeAudioContext();
           wsRef.current?.close();
           wsRef.current = null;
           setIsVoiceActive(false);
@@ -256,7 +285,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       endTimerRef.current = window.setTimeout(tick, POLL_MS);
     };
     tick();
-  }, []);
+  }, [closeAudioContext]);
 
   const handleUIEvent = useCallback(
     (event: string, data: unknown) => {
@@ -365,19 +394,20 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     micRef.current = null;
     playerRef.current?.stop();
     playerRef.current = null;
+    closeAudioContext();
     wsRef.current?.close();
     wsRef.current = null;
     setIsVoiceActive(false);
     setStatus("disconnected");
-  }, [clearWarning]);
+  }, [clearWarning, closeAudioContext]);
 
-  const startMic = useCallback(async () => {
+  const startMic = useCallback(async (audioCtx: AudioContext) => {
     const mic = await startMicCapture((pcmChunk) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const frame = encodeAudioFrame(pcmChunk, 16000, 1);
         wsRef.current.send(frame);
       }
-    });
+    }, audioCtx);
     micRef.current = mic;
     setIsVoiceActive(true);
     setStatus("listening");
@@ -394,13 +424,35 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
 
     setStatus("connecting");
 
+    // Create + resume the AudioContext NOW, synchronously inside the tap
+    // gesture — iOS/Safari only unlock audio this way. Reused for capture and
+    // playback. (Doing this later, in ws.onopen, leaves it muted on mobile.)
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      const audioCtx = new Ctx();
+      audioCtx.resume().catch(() => {});
+      audioCtxRef.current = audioCtx;
+    } catch {
+      setCanvas({
+        kind: "session_end",
+        reason: "mic_error",
+        message: "This browser can't play audio. Try Chrome or Safari directly.",
+      });
+      setStatus("disconnected");
+      return;
+    }
+
     // The voice line is public — fetch an anonymous ws-ticket (token is only
     // present for logged-in staff). The backend requires a ticket but no auth.
     let wsUrl = WS_URL;
     try {
       const { ticket } = await api.getWsTicket(token ?? undefined, getUserTimezone());
-      wsUrl = `${WS_URL}?ticket=${ticket}`;
+      wsUrl = `${WS_URL}?ticket=${ticket}&cid=${encodeURIComponent(getClientId())}`;
     } catch {
+      closeAudioContext();
       setStatus("disconnected");
       return;
     }
@@ -410,8 +462,23 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     wsRef.current = ws;
 
     ws.onopen = async () => {
-      playerRef.current = createAudioPlayer(24000);
-      await startMic();
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+      try {
+        playerRef.current = createAudioPlayer(ctx, 24000);
+        await startMic(ctx);
+      } catch (err) {
+        // Mic denied, no mic, or an in-app/webview browser that blocks getUserMedia.
+        const name = (err as { name?: string })?.name;
+        const message =
+          name === "NotAllowedError" || name === "SecurityError"
+            ? "Microphone access is needed to talk to Arjun. Tap the mic and choose Allow."
+            : name === "NotFoundError"
+              ? "No microphone found on this device."
+              : "Couldn't access the mic. Open the link in Chrome or Safari (not inside another app).";
+        setCanvas({ kind: "session_end", reason: "mic_error", message });
+        disconnectVoice();
+      }
     };
     ws.onmessage = handleMessage;
     ws.onclose = (event) => {
@@ -422,6 +489,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       micRef.current = null;
       playerRef.current?.stop();
       playerRef.current = null;
+      closeAudioContext();
       wsRef.current = null;
       // 4003 = server rejected the connection (per-IP cooldown / one-call-at-a-
       // time). Show the reason the server sent so it's clearly a demo limit.
@@ -436,7 +504,15 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       }
     };
     ws.onerror = () => ws.close();
-  }, [isVoiceActive, startMic, handleMessage, token, disconnectVoice, clearWarning]);
+  }, [
+    isVoiceActive,
+    startMic,
+    handleMessage,
+    token,
+    disconnectVoice,
+    clearWarning,
+    closeAudioContext,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -446,6 +522,10 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       wsRef.current?.close();
       micRef.current?.stop();
       playerRef.current?.stop();
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
     };
   }, []);
 

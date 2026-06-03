@@ -1,13 +1,14 @@
 /**
  * Browser audio capture and playback utilities.
  *
- * Cross-browser note: we do NOT force the AudioContext sample rate. Chrome
- * tolerates a forced rate, but Firefox handles forced-rate contexts poorly —
- * it can emit wrong-rate audio (garbling what the agent "hears") and can
- * disable echo cancellation, which causes the agent to hear its own voice and
- * loop. Instead we run each AudioContext at the device's native rate and
- * resample in JS: mic → 16 kHz before sending, and play 24 kHz buffers that the
- * Web Audio API resamples to the output context automatically.
+ * Cross-browser notes:
+ * - We do NOT force the AudioContext sample rate. Firefox handles forced-rate
+ *   contexts poorly (wrong-rate audio + disabled echo cancellation). We run at
+ *   the device's native rate and resample in JS: mic → 16 kHz, and play 24 kHz
+ *   buffers that the Web Audio API resamples to the output context.
+ * - The AudioContext is created+resumed by the CALLER inside the user's tap
+ *   gesture (iOS/Safari only unlock audio that way), then passed in here. So
+ *   both capture and playback share one already-unlocked context.
  */
 
 const TARGET_INPUT_RATE = 16000; // Gemini Live expects 16 kHz mono PCM in
@@ -30,15 +31,20 @@ function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
 }
 
 /**
- * Start capturing audio from the microphone.
- * Returns 16 kHz PCM Int16 chunks via the onAudioChunk callback.
+ * Start capturing audio from the microphone using the provided (already
+ * resumed) AudioContext. Emits 16 kHz PCM Int16 chunks via onAudioChunk.
+ * Throws "MIC_UNSUPPORTED" if the browser can't access the mic (e.g. an
+ * in-app/webview browser or an insecure context).
  */
 export async function startMicCapture(
-  onAudioChunk: (pcm: Uint8Array) => void
+  onAudioChunk: (pcm: Uint8Array) => void,
+  audioCtx: AudioContext
 ): Promise<{ stop: () => void }> {
-  // Echo cancellation + noise suppression + auto gain are essential: without
-  // them the mic picks up the agent's own voice from the speakers and the
-  // conversation feeds back on itself. Let the browser pick the native rate.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("MIC_UNSUPPORTED");
+  }
+
+  // Echo cancellation etc. stop the mic from picking up the agent's own voice.
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
@@ -48,12 +54,16 @@ export async function startMicCapture(
     },
   });
 
-  const audioCtx = new AudioContext();
+  if (audioCtx.state === "suspended") {
+    try {
+      await audioCtx.resume();
+    } catch {
+      /* best effort */
+    }
+  }
+
   const inputRate = audioCtx.sampleRate;
   const source = audioCtx.createMediaStreamSource(stream);
-
-  // ScriptProcessor is deprecated but widely supported and simple.
-  // AudioWorklet would be better for production.
   const processor = audioCtx.createScriptProcessor(4096, 1, 1);
 
   processor.onaudioprocess = (e) => {
@@ -70,26 +80,31 @@ export async function startMicCapture(
   source.connect(processor);
   processor.connect(audioCtx.destination);
 
+  // Caller owns the AudioContext lifecycle (it's shared with playback).
   return {
     stop: () => {
       processor.disconnect();
       source.disconnect();
-      audioCtx.close();
       stream.getTracks().forEach((t) => t.stop());
     },
   };
 }
 
 /**
- * Creates an audio player that queues and plays PCM Int16 audio chunks.
- * The context runs at the device's native rate; buffers created at the source
- * rate (24 kHz) are resampled by the Web Audio API on playback.
+ * Creates an audio player on the provided (already resumed) AudioContext.
+ * Buffers created at the source rate (24 kHz) are resampled by the Web Audio
+ * API on playback. The caller owns the context's lifecycle.
  */
-export function createAudioPlayer(sampleRate: number = OUTPUT_RATE) {
-  const audioCtx = new AudioContext();
+export function createAudioPlayer(
+  audioCtx: AudioContext,
+  sampleRate: number = OUTPUT_RATE
+) {
   let nextStartTime = 0;
 
   function play(pcmInt16: Uint8Array, numChannels: number = 1) {
+    // Mobile contexts can drift back to "suspended"; nudge it before playing.
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+
     const int16 = new Int16Array(
       pcmInt16.buffer,
       pcmInt16.byteOffset,
@@ -116,12 +131,10 @@ export function createAudioPlayer(sampleRate: number = OUTPUT_RATE) {
   }
 
   function stop() {
-    nextStartTime = 0;
-    audioCtx.close();
+    nextStartTime = 0; // caller closes the shared AudioContext
   }
 
   function interrupt() {
-    // Reset the queue so next audio plays immediately
     nextStartTime = 0;
   }
 

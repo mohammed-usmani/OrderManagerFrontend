@@ -14,8 +14,9 @@ import type { ReactNode } from "react";
 export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-full bg-paper text-ink">
-      {/* Content column — sized to leave room for the dark sidebar on desktop. */}
-      <div className="min-h-dvh flex flex-col">{children}</div>
+      {/* Content column — sized to leave room for the dark sidebar on desktop.
+          pt-14 on mobile clears the fixed AppShell mobile header. */}
+      <div className="min-h-dvh flex flex-col pt-16 md:pt-0">{children}</div>
     </div>
   );
 }

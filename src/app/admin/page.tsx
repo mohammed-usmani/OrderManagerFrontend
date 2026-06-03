@@ -94,7 +94,7 @@ export default function AdminDashboardPage() {
           </div>
         </Toolbar>
 
-        <main className="flex-1 overflow-y-auto px-4 md:px-8 py-4 max-w-[1600px] mx-auto w-full">
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-28 md:pb-8 max-w-[1600px] mx-auto w-full">
           {error && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}

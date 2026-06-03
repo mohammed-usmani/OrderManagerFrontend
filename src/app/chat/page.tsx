@@ -78,10 +78,13 @@ export default function ChatPage() {
       </div>
 
       {/* Content area — Canvas or an inviting idle state */}
-      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 pb-48 md:pb-40">
+      {/* Big bottom padding clears the floating mic + bottom nav so the last
+          item is always reachable. Centering only on md+ (taller screens) —
+          on mobile we top-align so tall content stays fully scrollable. */}
+      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 pb-[20rem] md:pb-48">
         <div
           className={`px-4 md:px-8 py-2 md:py-6 max-w-[1400px] mx-auto w-full ${
-            centered ? "min-h-full flex flex-col justify-center" : ""
+            centered ? "md:min-h-full md:flex md:flex-col md:justify-center" : ""
           }`}
         >
           {isIdle ? <IdleHero /> : <Canvas canvas={canvas} />}
@@ -91,7 +94,7 @@ export default function ChatPage() {
       {/* Mic zone — the one control. On mobile it floats above the BottomNav. */}
       <div className="fixed bottom-24 md:bottom-0 left-0 md:left-64 right-0 z-[70] pointer-events-none">
         <div className="relative pointer-events-auto">
-          <div className="absolute inset-x-0 -top-20 h-20 bg-gradient-to-t from-[#14100c] via-[#14100c]/85 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 -top-10 h-10 bg-gradient-to-t from-[#14100c] to-transparent pointer-events-none" />
 
           <div className="flex flex-col items-center gap-2 py-4 md:py-6 bg-[#14100c]/85 backdrop-blur-xl border-t border-white/5">
             {warningSecondsLeft !== null && (
