@@ -11,13 +11,13 @@ type ButtonSize = "sm" | "md";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary:
-    "bg-zinc-900 text-white hover:bg-zinc-800 disabled:bg-zinc-300 disabled:text-zinc-500",
+    "bg-primary text-on-primary hover:brightness-105 shadow-sm shadow-primary/30 disabled:bg-line-strong disabled:text-ink-faint disabled:shadow-none",
   secondary:
-    "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 disabled:text-zinc-400",
+    "bg-paper-raised text-ink border border-line-strong hover:bg-paper-sunken disabled:text-ink-faint",
   ghost:
-    "bg-transparent text-zinc-700 hover:bg-zinc-100 disabled:text-zinc-400",
+    "bg-transparent text-ink-soft hover:bg-paper-sunken disabled:text-ink-faint",
   danger:
-    "bg-rose-600 text-white hover:bg-rose-700 disabled:bg-rose-300",
+    "bg-[#c0392b] text-white hover:bg-[#a93226] disabled:bg-[#c0392b]/40",
 };
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
@@ -61,7 +61,7 @@ export function Input({
 }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 ${className}`}
+      className={`h-9 px-3 rounded-md border border-line-strong bg-paper-raised text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 ${className}`}
       {...rest}
     />
   );
@@ -74,7 +74,7 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`h-9 pl-3 pr-8 rounded-md border border-zinc-300 bg-white text-sm text-zinc-900 focus:outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 ${className}`}
+      className={`h-9 pl-3 pr-8 rounded-md border border-line-strong bg-paper-raised text-sm text-ink focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 ${className}`}
       {...rest}
     >
       {children}
@@ -85,13 +85,13 @@ export function Select({
 // --- Status chip ---------------------------------------------------------
 
 const STATUS_CHIP: Record<string, string> = {
-  cart: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  confirmed: "bg-blue-50 text-blue-700 border-blue-200",
-  awaiting_payment: "bg-amber-50 text-amber-700 border-amber-200",
-  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  cancelled: "bg-rose-50 text-rose-700 border-rose-200",
-  available: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  disabled: "bg-zinc-100 text-zinc-500 border-zinc-200",
+  cart: "bg-paper-sunken text-ink-soft border-line",
+  confirmed: "bg-tertiary/15 text-[#8a5a00] border-tertiary/30",
+  awaiting_payment: "bg-amber-100/70 text-amber-800 border-amber-300/60",
+  paid: "bg-emerald-100/70 text-emerald-800 border-emerald-300/60",
+  cancelled: "bg-rose-100/70 text-rose-800 border-rose-300/60",
+  available: "bg-emerald-100/70 text-emerald-800 border-emerald-300/60",
+  disabled: "bg-paper-sunken text-ink-faint border-line",
 };
 
 export function StatusChip({ status }: { status: string }) {
@@ -116,7 +116,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-lg border border-zinc-200 bg-white ${className}`}
+      className={`rounded-lg border border-line bg-paper-raised ${className}`}
     >
       {children}
     </div>
@@ -127,7 +127,7 @@ export function Card({
 
 export function Toolbar({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 md:px-8 py-3 border-b border-zinc-200 bg-zinc-50 max-w-[1600px] mx-auto w-full">
+    <div className="flex flex-wrap items-center gap-2 px-4 md:px-8 py-3 border-b border-line bg-paper-sunken/60 max-w-[1600px] mx-auto w-full">
       {children}
     </div>
   );
@@ -151,25 +151,25 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2a2016]/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-lg border border-zinc-200 bg-white shadow-xl"
+        className="w-full max-w-lg rounded-xl border border-line bg-paper-raised shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between px-5 py-3 border-b border-zinc-200">
-          <h2 className="font-headline font-bold text-zinc-900 text-base">{title}</h2>
+        <header className="flex items-center justify-between px-5 py-3 border-b border-line">
+          <h2 className="font-headline font-semibold text-ink text-lg">{title}</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+            className="p-1 rounded-md text-ink-soft hover:bg-paper-sunken hover:text-ink"
           >
             <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </header>
-        <div className="px-5 py-4 space-y-3 text-sm text-zinc-700">{children}</div>
+        <div className="px-5 py-4 space-y-3 text-sm text-ink-soft">{children}</div>
         {footer && (
-          <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-200 bg-zinc-50">
+          <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line bg-paper-sunken/50">
             {footer}
           </footer>
         )}

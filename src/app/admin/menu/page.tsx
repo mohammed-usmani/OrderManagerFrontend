@@ -281,7 +281,7 @@ export default function AdminMenuPage() {
           <div className="flex-1" />
           {selected.size > 0 && (
             <>
-              <span className="text-xs text-zinc-500 mr-1">{selected.size} selected</span>
+              <span className="text-xs text-ink-soft mr-1">{selected.size} selected</span>
               <Button size="sm" onClick={() => bulkSetAvailability(true)}>
                 Enable
               </Button>
@@ -301,7 +301,7 @@ export default function AdminMenuPage() {
 
           {loading && (
             <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
             </div>
           )}
 
@@ -309,8 +309,8 @@ export default function AdminMenuPage() {
             <Card className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-zinc-50 border-b border-zinc-200">
-                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <thead className="bg-paper-sunken/50 border-b border-line">
+                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                       <th className="px-3 py-2 w-10">
                         <input
                           type="checkbox"
@@ -336,8 +336,8 @@ export default function AdminMenuPage() {
                       return (
                         <tr
                           key={item.id}
-                          className={`border-b border-zinc-100 hover:bg-zinc-50 ${
-                            isSelected ? "bg-zinc-50/70" : ""
+                          className={`border-b border-line hover:bg-paper-sunken/60 ${
+                            isSelected ? "bg-paper-sunken/40" : ""
                           } ${busy ? "opacity-60" : ""}`}
                         >
                           <td className="px-3 py-2">
@@ -348,7 +348,7 @@ export default function AdminMenuPage() {
                               className="cursor-pointer"
                             />
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs text-zinc-500">{item.id}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-ink-soft">{item.id}</td>
                           <EditableCell
                             active={editingCell?.id === item.id && editingCell.field === "name"}
                             draft={cellDraft}
@@ -357,7 +357,7 @@ export default function AdminMenuPage() {
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
                           >
-                            <span className="font-medium text-zinc-900">{item.name}</span>
+                            <span className="font-medium text-ink">{item.name}</span>
                           </EditableCell>
                           <EditableCell
                             active={editingCell?.id === item.id && editingCell.field === "category"}
@@ -367,7 +367,7 @@ export default function AdminMenuPage() {
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
                           >
-                            <span className="text-zinc-700 lowercase">{item.category}</span>
+                            <span className="text-ink-soft lowercase">{item.category}</span>
                           </EditableCell>
                           <EditableCell
                             right
@@ -379,7 +379,7 @@ export default function AdminMenuPage() {
                             onCancel={() => setEditingCell(null)}
                             inputMode="decimal"
                           >
-                            <span className="font-medium text-zinc-900 tabular-nums">
+                            <span className="font-medium text-ink tabular-nums">
                               {formatPrice(item.price)}
                             </span>
                           </EditableCell>
@@ -391,7 +391,7 @@ export default function AdminMenuPage() {
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
                           >
-                            <span className="text-zinc-700">{item.spice_level || "—"}</span>
+                            <span className="text-ink-soft">{item.spice_level || "—"}</span>
                           </EditableCell>
                           <EditableCell
                             active={editingCell?.id === item.id && editingCell.field === "serving"}
@@ -401,7 +401,7 @@ export default function AdminMenuPage() {
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
                           >
-                            <span className="text-zinc-700">{item.serving || "—"}</span>
+                            <span className="text-ink-soft">{item.serving || "—"}</span>
                           </EditableCell>
                           <td className="px-3 py-2">
                             <StatusChip status={item.available ? "available" : "disabled"} />
@@ -421,7 +421,7 @@ export default function AdminMenuPage() {
                     })}
                     {visible.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-3 py-10 text-center text-zinc-500 text-sm">
+                        <td colSpan={9} className="px-3 py-10 text-center text-ink-soft text-sm">
                           No items match these filters.
                         </td>
                       </tr>
@@ -432,9 +432,9 @@ export default function AdminMenuPage() {
             </Card>
           )}
 
-          <p className="text-xs text-zinc-500 mt-3">
-            Click any cell to edit. Press <kbd className="px-1 py-0.5 border border-zinc-300 rounded bg-white">Enter</kbd> to save,{" "}
-            <kbd className="px-1 py-0.5 border border-zinc-300 rounded bg-white">Esc</kbd> to cancel.
+          <p className="text-xs text-ink-soft mt-3">
+            Click any cell to edit. Press <kbd className="px-1 py-0.5 border border-line-strong rounded bg-paper-raised">Enter</kbd> to save,{" "}
+            <kbd className="px-1 py-0.5 border border-line-strong rounded bg-paper-raised">Esc</kbd> to cancel.
             Changes apply live to the voice agent and customer views.
           </p>
         </main>
@@ -475,11 +475,11 @@ function SortableTh({
   return (
     <th
       onClick={() => onClick(k)}
-      className={`px-3 py-2 cursor-pointer select-none hover:text-zinc-900 ${
+      className={`px-3 py-2 cursor-pointer select-none hover:text-ink ${
         right ? "text-right" : ""
       }`}
     >
-      <span className={`inline-flex items-center gap-1 ${active ? "text-zinc-900" : ""}`}>
+      <span className={`inline-flex items-center gap-1 ${active ? "text-ink" : ""}`}>
         {label}
         {active && (
           <span className="material-symbols-outlined text-[12px] leading-none">
@@ -531,7 +531,7 @@ function EditableCell({
             }
           }}
           inputMode={inputMode}
-          className={`w-full h-7 px-2 rounded border border-zinc-900 bg-white text-sm text-zinc-900 focus:outline-none ${
+          className={`w-full h-7 px-2 rounded border border-primary bg-paper-raised text-sm text-ink focus:outline-none ${
             right ? "text-right tabular-nums" : ""
           }`}
         />
@@ -541,7 +541,7 @@ function EditableCell({
   return (
     <td
       onClick={onBeginEdit}
-      className={`px-3 py-2 cursor-text hover:bg-zinc-100/50 ${right ? "text-right" : ""}`}
+      className={`px-3 py-2 cursor-text hover:bg-paper-sunken/50 ${right ? "text-right" : ""}`}
     >
       {children}
     </td>
@@ -563,22 +563,43 @@ function CreateItemModal({
   existingIds: string[];
   token: string;
 }) {
-  const [form, setForm] = useState<MenuItemCreateAPI>({
+  const EMPTY: MenuItemCreateAPI = {
     id: "",
     name: "",
     category: "mains",
     price: 0,
-  });
+    currency: "INR",
+  };
+  const [form, setForm] = useState<MenuItemCreateAPI>(EMPTY);
+  const [dietaryStr, setDietaryStr] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!open) {
-      setForm({ id: "", name: "", category: "mains", price: 0 });
+      setForm(EMPTY);
+      setDietaryStr("");
       setErr("");
       setBusy(false);
+      setUploading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const onPickImage = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    setErr("");
+    try {
+      const { image_url } = await api.adminUploadMenuImage(token, file);
+      setForm((f) => ({ ...f, image_url }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const submit = async () => {
     if (!form.id || !form.name || !form.category) {
@@ -589,10 +610,17 @@ function CreateItemModal({
       setErr(`ID "${form.id}" is already in use.`);
       return;
     }
+    const dietary = dietaryStr
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     setBusy(true);
     setErr("");
     try {
-      await api.adminCreateMenuItem(token, form);
+      await api.adminCreateMenuItem(token, {
+        ...form,
+        dietary: dietary.length ? dietary : null,
+      });
       onCreated();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -611,7 +639,7 @@ function CreateItemModal({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={busy}>
+          <Button variant="primary" onClick={submit} disabled={busy || uploading}>
             {busy ? "Creating…" : "Create"}
           </Button>
         </>
@@ -622,6 +650,15 @@ function CreateItemModal({
           {err}
         </div>
       )}
+
+      <ImageUploadField
+        imageUrl={form.image_url ?? ""}
+        uploading={uploading}
+        onPick={onPickImage}
+        onUrlChange={(v) => setForm({ ...form, image_url: v || null })}
+        onClear={() => setForm({ ...form, image_url: null })}
+      />
+
       <div className="grid grid-cols-2 gap-3">
         <Labeled label="ID (e.g. M07)">
           <Input
@@ -656,11 +693,32 @@ function CreateItemModal({
             }
           />
         </Labeled>
+        <Labeled label="Serving">
+          <Input
+            value={form.serving ?? ""}
+            onChange={(e) => setForm({ ...form, serving: e.target.value || null })}
+            placeholder="e.g. serves 2 / 6 pieces"
+          />
+        </Labeled>
         <Labeled label="Spice level">
           <Input
             value={form.spice_level ?? ""}
             onChange={(e) => setForm({ ...form, spice_level: e.target.value || null })}
             placeholder="mild / medium / hot"
+          />
+        </Labeled>
+        <Labeled label="Dietary (comma-separated)">
+          <Input
+            value={dietaryStr}
+            onChange={(e) => setDietaryStr(e.target.value)}
+            placeholder="vegan, gluten-free"
+          />
+        </Labeled>
+        <Labeled label="Taste profile" full>
+          <Input
+            value={form.taste_profile ?? ""}
+            onChange={(e) => setForm({ ...form, taste_profile: e.target.value || null })}
+            placeholder="rich, creamy, mildly sweet"
           />
         </Labeled>
         <Labeled label="Description" full>
@@ -671,8 +729,97 @@ function CreateItemModal({
             }
           />
         </Labeled>
+        <Labeled label="How it's made" full>
+          <Input
+            value={form.how_its_made ?? ""}
+            onChange={(e) => setForm({ ...form, how_its_made: e.target.value || null })}
+          />
+        </Labeled>
+        <Labeled label="Popularity (1–5)">
+          <Input
+            inputMode="decimal"
+            value={form.popularity == null ? "" : String(form.popularity)}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                popularity: e.target.value ? parseFloat(e.target.value) : null,
+              })
+            }
+          />
+        </Labeled>
+        <Labeled label="Popularity note">
+          <Input
+            value={form.popularity_note ?? ""}
+            onChange={(e) =>
+              setForm({ ...form, popularity_note: e.target.value || null })
+            }
+            placeholder="Our #1 seller"
+          />
+        </Labeled>
       </div>
     </Modal>
+  );
+}
+
+// --- Image upload + URL field --------------------------------------------
+
+function ImageUploadField({
+  imageUrl,
+  uploading,
+  onPick,
+  onUrlChange,
+  onClear,
+}: {
+  imageUrl: string;
+  uploading: boolean;
+  onPick: (file: File | undefined) => void;
+  onUrlChange: (v: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-line bg-paper-sunken/50 p-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+        Image
+      </span>
+      <div className="mt-2 flex items-start gap-3">
+        <div className="w-20 h-20 shrink-0 rounded-md border border-line bg-paper-raised overflow-hidden flex items-center justify-center">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt="preview" className="w-full h-full object-cover" />
+          ) : (
+            <span className="material-symbols-outlined text-ink-faint text-[28px]">
+              image
+            </span>
+          )}
+        </div>
+        <div className="flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-line-strong bg-paper-raised text-xs font-medium text-ink hover:bg-paper-sunken/60 cursor-pointer">
+              <span className="material-symbols-outlined text-[16px]">upload</span>
+              {uploading ? "Uploading…" : "Upload image"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => onPick(e.target.files?.[0])}
+              />
+            </label>
+            {imageUrl && (
+              <Button size="sm" variant="ghost" onClick={onClear}>
+                Remove
+              </Button>
+            )}
+          </div>
+          <Input
+            value={imageUrl}
+            onChange={(e) => onUrlChange(e.target.value)}
+            placeholder="…or paste an image URL"
+            className="w-full"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -687,7 +834,7 @@ function Labeled({
 }) {
   return (
     <label className={`block ${full ? "col-span-2" : ""}`}>
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
         {label}
       </span>
       <div className="mt-1">{children}</div>

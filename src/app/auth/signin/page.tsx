@@ -28,31 +28,30 @@ export default function SignInPage() {
 
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-4 relative overflow-hidden">
-      {/* Ambient glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[300px] rounded-full bg-primary/5 blur-[100px] pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] max-w-[90vw] h-[320px] rounded-full bg-primary/8 blur-[110px] pointer-events-none" />
 
-      <div className="w-full max-w-sm space-y-8 relative">
-        {/* Logo */}
-        <div className="text-center space-y-2">
-          <button
-            onClick={() => router.push("/")}
-            className="inline-flex items-center gap-2 mb-4"
-          >
-            <span className="material-symbols-outlined text-primary text-2xl">restaurant</span>
-            <span className="font-headline font-extrabold text-xl text-white">
-              Saffron & Smoke
+      <div className="w-full max-w-sm space-y-7 relative reveal">
+        <div className="text-center space-y-3">
+          <button onClick={() => router.push("/")} className="inline-flex items-center gap-2 mb-2">
+            <span
+              className="material-symbols-outlined text-primary text-2xl"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              local_fire_department
+            </span>
+            <span className="font-headline font-semibold text-lg text-on-surface tracking-tight">
+              Saffron <span className="text-primary">&amp;</span> Smoke
             </span>
           </button>
-          <h2 className="font-headline font-extrabold text-3xl text-white">
-            Welcome back
-          </h2>
-          <p className="text-on-surface-variant text-sm">
-            Sign in to continue your experience
-          </p>
+          <div className="flex items-center justify-center gap-2 text-on-surface-variant">
+            <span className="material-symbols-outlined text-[15px]">lock</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.25em]">Staff entrance</span>
+          </div>
+          <h2 className="font-headline font-semibold text-3xl text-on-surface">Back of house</h2>
+          <p className="text-on-surface-variant text-sm">Sign in to manage the kitchen.</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="glass-panel rounded-2xl p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="ember-card rounded-2xl p-6 space-y-4">
           {error && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-error/10 border border-error/20">
               <span className="material-symbols-outlined text-error text-[18px]">error</span>
@@ -60,8 +59,8 @@ export default function SignInPage() {
             </div>
           )}
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant font-headline">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.15em] text-on-surface-variant">
               Email
             </label>
             <input
@@ -69,13 +68,13 @@ export default function SignInPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@example.com"
-              className="w-full bg-surface-container-highest border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+              placeholder="you@saffronandsmoke.in"
+              className="w-full bg-surface-container-highest border border-white/10 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition-all text-sm"
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant font-headline">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.15em] text-on-surface-variant">
               Password
             </label>
             <input
@@ -84,33 +83,33 @@ export default function SignInPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="••••••••"
-              className="w-full bg-surface-container-highest border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+              className="w-full bg-surface-container-highest border border-white/10 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition-all text-sm"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm tracking-widest uppercase shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            className="w-full py-3.5 rounded-xl bg-primary text-on-primary font-headline font-semibold text-sm tracking-wide hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-1 shadow-[0_12px_34px_-12px_rgba(255,106,26,0.7)]"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin" />
-                Signing in...
+                Signing in…
               </span>
             ) : (
-              "Sign In"
+              "Sign in"
             )}
           </button>
         </form>
 
-        <p className="text-center text-on-surface-variant text-sm">
-          No account?{" "}
+        <p className="text-center">
           <button
-            onClick={() => router.push("/auth/signup")}
-            className="text-primary font-bold hover:underline"
+            onClick={() => router.push("/chat")}
+            className="text-on-surface-variant text-sm hover:text-on-surface transition-colors inline-flex items-center gap-1.5"
           >
-            Create one
+            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+            Just here to order? Talk to Arjun
           </button>
         </p>
       </div>

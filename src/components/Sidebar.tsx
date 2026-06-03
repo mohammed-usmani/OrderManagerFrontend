@@ -9,18 +9,19 @@ interface NavItem {
   label: string;
 }
 
-// Admins get the back-office nav; customers get the ordering nav. Admins
-// never see Chat or customer Orders — their job is management.
-const CUSTOMER_NAV: NavItem[] = [
-  { href: "/chat", icon: "chat_bubble", label: "Chat" },
-  { href: "/orders", icon: "receipt_long", label: "Orders" },
-  { href: "/profile", icon: "person", label: "Profile" },
+// The ordering line is public (anonymous parcel callers). Customers only need
+// the landing + the voice mic — no accounts. Admins get the back-office nav.
+const PUBLIC_NAV: NavItem[] = [
+  { href: "/", icon: "home", label: "Home" },
+  { href: "/chat", icon: "mic", label: "Order" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", icon: "dashboard", label: "Dashboard" },
   { href: "/admin/orders", icon: "soup_kitchen", label: "Kitchen" },
   { href: "/admin/menu", icon: "restaurant_menu", label: "Menu" },
+  { href: "/admin/customers", icon: "groups", label: "Customers" },
+  { href: "/admin/service-areas", icon: "pin_drop", label: "Delivery areas" },
   { href: "/profile", icon: "person", label: "Profile" },
 ];
 
@@ -42,7 +43,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const visibleItems = user?.is_admin ? ADMIN_NAV : CUSTOMER_NAV;
+  const visibleItems = user?.is_admin ? ADMIN_NAV : PUBLIC_NAV;
   const activeRoute = activeHref(pathname, visibleItems);
 
   const initials = user ? user.email.slice(0, 2).toUpperCase() : "??";
@@ -94,30 +95,42 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* User section */}
+      {/* Footer — staff identity when logged in, otherwise a quiet staff door */}
       <div className="border-t border-white/5 px-4 py-4 space-y-3">
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
-            <span className="font-headline font-bold text-xs text-primary">
-              {initials}
-            </span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-white text-sm font-medium truncate">
-              {user?.email.split("@")[0]}
-            </p>
-            <p className="text-on-surface-variant text-[11px] truncate">
-              {user?.email}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-error/80 text-xs font-bold hover:bg-error/5 transition-colors"
-        >
-          <span className="material-symbols-outlined text-[16px]">logout</span>
-          Sign Out
-        </button>
+        {user ? (
+          <>
+            <div className="flex items-center gap-3 px-2">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
+                <span className="font-headline font-bold text-xs text-primary">
+                  {initials}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-on-surface text-sm font-medium truncate">
+                  {user.email.split("@")[0]}
+                </p>
+                <p className="text-on-surface-variant text-[11px] truncate">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-error/80 text-xs font-bold hover:bg-error/5 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">logout</span>
+              Sign Out
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => router.push("/auth/signin")}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-on-surface-variant text-xs font-semibold hover:text-on-surface hover:bg-white/5 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[16px]">lock</span>
+            Staff sign in
+          </button>
+        )}
       </div>
     </aside>
   );

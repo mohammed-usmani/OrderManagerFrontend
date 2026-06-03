@@ -24,7 +24,7 @@ const STATUS_ACCENT: Record<string, string> = {
   awaiting_payment: "text-amber-700",
   paid: "text-emerald-700",
   cancelled: "text-rose-700",
-  cart: "text-zinc-500",
+  cart: "text-ink-soft",
 };
 
 const REFRESH_MS = 30000;
@@ -84,8 +84,8 @@ export default function AdminDashboardPage() {
                 onClick={() => setRange(r)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                   range === r
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600 hover:bg-zinc-200"
+                    ? "bg-primary text-on-primary"
+                    : "text-ink-soft hover:bg-paper-sunken"
                 }`}
               >
                 {RANGE_LABEL[r]}
@@ -103,7 +103,7 @@ export default function AdminDashboardPage() {
 
           {loading && !summary && (
             <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
             </div>
           )}
 
@@ -130,8 +130,8 @@ export default function AdminDashboardPage() {
 
               {/* Orders by status */}
               <Card className="overflow-hidden">
-                <header className="px-4 py-2 border-b border-zinc-200 bg-zinc-50">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                <header className="px-4 py-2 border-b border-line bg-paper-sunken/50">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                     Orders by status
                   </p>
                 </header>
@@ -139,12 +139,12 @@ export default function AdminDashboardPage() {
                   {["confirmed", "awaiting_payment", "paid", "cancelled", "cart"].map(
                     (status) => (
                       <div key={status}>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                           {status.replace("_", " ")}
                         </p>
                         <p
                           className={`font-headline font-extrabold text-2xl mt-0.5 tabular-nums ${
-                            STATUS_ACCENT[status] ?? "text-zinc-900"
+                            STATUS_ACCENT[status] ?? "text-ink"
                           }`}
                         >
                           {summary.orders_by_status[status] ?? 0}
@@ -157,19 +157,19 @@ export default function AdminDashboardPage() {
 
               {/* Top items */}
               <Card className="overflow-hidden">
-                <header className="px-4 py-2 border-b border-zinc-200 bg-zinc-50">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                <header className="px-4 py-2 border-b border-line bg-paper-sunken/50">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                     Top selling dishes
                   </p>
                 </header>
                 {summary.top_items.length === 0 ? (
-                  <p className="px-4 py-6 text-zinc-500 text-sm italic">
+                  <p className="px-4 py-6 text-ink-soft text-sm italic">
                     No sales in this period yet.
                   </p>
                 ) : (
                   <table className="w-full text-sm">
-                    <thead className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                      <tr className="border-b border-zinc-100">
+                    <thead className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+                      <tr className="border-b border-line">
                         <th className="px-4 py-2 w-10">#</th>
                         <th className="px-4 py-2">Dish</th>
                         <th className="px-4 py-2 w-24 text-right">Qty sold</th>
@@ -180,19 +180,19 @@ export default function AdminDashboardPage() {
                       {summary.top_items.map((it, idx) => (
                         <tr
                           key={it.menu_item_id}
-                          className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                          className="border-b border-line last:border-0 hover:bg-paper-sunken/60"
                         >
-                          <td className="px-4 py-2 text-zinc-500 tabular-nums">{idx + 1}</td>
+                          <td className="px-4 py-2 text-ink-soft tabular-nums">{idx + 1}</td>
                           <td className="px-4 py-2">
-                            <div className="font-medium text-zinc-900">{it.name}</div>
-                            <div className="text-xs text-zinc-500 font-mono">
+                            <div className="font-medium text-ink">{it.name}</div>
+                            <div className="text-xs text-ink-soft font-mono">
                               {it.menu_item_id}
                             </div>
                           </td>
-                          <td className="px-4 py-2 text-right text-zinc-700 tabular-nums">
+                          <td className="px-4 py-2 text-right text-ink-soft tabular-nums">
                             {it.quantity}
                           </td>
-                          <td className="px-4 py-2 text-right font-medium text-zinc-900 tabular-nums">
+                          <td className="px-4 py-2 text-right font-medium text-ink tabular-nums">
                             {formatPrice(it.revenue)}
                           </td>
                         </tr>
@@ -220,13 +220,13 @@ function Metric({
 }) {
   return (
     <Card className="px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
         {label}
       </p>
-      <p className="font-headline font-extrabold text-zinc-900 text-2xl mt-1 tabular-nums">
+      <p className="font-headline font-extrabold text-ink text-2xl mt-1 tabular-nums">
         {value}
       </p>
-      {hint && <p className="text-zinc-500 text-xs mt-0.5">{hint}</p>}
+      {hint && <p className="text-ink-soft text-xs mt-0.5">{hint}</p>}
     </Card>
   );
 }

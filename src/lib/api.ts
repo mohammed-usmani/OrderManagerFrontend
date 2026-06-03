@@ -99,7 +99,9 @@ export const api = {
       method: "DELETE",
       token,
     }),
-  getWsTicket: (token: string, timezone?: string) =>
+  // Public — the voice line is open to anyone. Token is optional (only staff
+  // are ever logged in); the backend issues an anonymous ticket either way.
+  getWsTicket: (token?: string, timezone?: string) =>
     apiFetch<{ ticket: string }>("/auth/ws-ticket", {
       method: "POST",
       token,
@@ -149,6 +151,65 @@ export const api = {
       method: "DELETE",
       token,
     }),
+  adminUploadMenuImage: async (token: string, file: File) => {
+    // Multipart upload — must NOT set Content-Type (browser adds the boundary).
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_URL}/menu/upload-image`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return (await res.json()) as { image_url: string };
+  },
+  adminReembedMenu: (token: string, onlyMissing = false) =>
+    apiFetch<{ embedded: number }>(
+      `/menu/reembed?only_missing=${onlyMissing}`,
+      { method: "POST", token },
+    ),
+
+  // Customers (admin)
+  adminListCustomers: (token: string, search?: string) =>
+    apiFetch<CustomerAPI[]>(
+      `/customers${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+      { token },
+    ),
+  adminGetCustomerOrders: (token: string, id: string) =>
+    apiFetch<CustomerOrderSummaryAPI[]>(`/customers/${id}/orders`, { token }),
+  adminCreateCustomer: (token: string, body: CustomerWriteAPI) =>
+    apiFetch<CustomerAPI>("/customers", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+  adminUpdateCustomer: (token: string, id: string, body: CustomerWriteAPI) =>
+    apiFetch<CustomerAPI>(`/customers/${id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  // Service areas (admin)
+  adminListServiceAreas: (token: string) =>
+    apiFetch<ServiceAreaAPI[]>("/service-areas", { token }),
+  adminCreateServiceArea: (token: string, body: ServiceAreaWriteAPI) =>
+    apiFetch<ServiceAreaAPI>("/service-areas", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+  adminUpdateServiceArea: (token: string, id: string, body: ServiceAreaWriteAPI) =>
+    apiFetch<ServiceAreaAPI>(`/service-areas/${id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
+  adminDeleteServiceArea: (token: string, id: string) =>
+    apiFetch<void>(`/service-areas/${id}`, { method: "DELETE", token }),
 };
 
 // Admin types
@@ -185,10 +246,16 @@ export interface MenuItemCreateAPI {
   name: string;
   category: string;
   price: number;
+  currency?: string;
   description?: string | null;
+  how_its_made?: string | null;
+  taste_profile?: string | null;
   spice_level?: string | null;
   serving?: string | null;
   dietary?: string[] | null;
+  popularity?: number | null;
+  popularity_note?: string | null;
+  image_url?: string | null;
   available?: boolean;
 }
 
@@ -212,14 +279,78 @@ export interface MenuItemPatchAPI {
 export interface AdminOrderAPI {
   id: string;
   status: string;
+  order_type: string;
   created_at: string;
   confirmed_at: string | null;
   paid_at: string | null;
   customer_email: string;
   customer_name: string;
+  customer_code: string | null;
+  contact_phone: string | null;
+  delivery_address: string | null;
+  delivery_area: string | null;
+  delivery_pincode: string | null;
   item_count: number;
   subtotal: number;
   charges: BillCharge[];
   total: number;
   items: AdminOrderItemAPI[];
+}
+
+// Customers (parcel callers)
+
+export interface CustomerAPI {
+  id: string;
+  code: string;
+  phone: string | null;
+  name: string | null;
+  address_line: string | null;
+  area: string | null;
+  pincode: string | null;
+  landmark: string | null;
+  preferences: string | null;
+  allergies: string | null;
+  notes: string | null;
+  order_count: number;
+  last_order_at: string | null;
+  created_at: string;
+}
+
+export interface CustomerWriteAPI {
+  name?: string | null;
+  phone?: string | null;
+  address_line?: string | null;
+  area?: string | null;
+  pincode?: string | null;
+  landmark?: string | null;
+  preferences?: string | null;
+  allergies?: string | null;
+  notes?: string | null;
+}
+
+export interface CustomerOrderSummaryAPI {
+  id: string;
+  status: string;
+  created_at: string;
+  item_count: number;
+  subtotal: number;
+  total: number;
+}
+
+// Service areas (delivery allowlist)
+
+export interface ServiceAreaAPI {
+  id: string;
+  name: string;
+  pincode: string | null;
+  aliases: string[] | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface ServiceAreaWriteAPI {
+  name?: string;
+  pincode?: string | null;
+  aliases?: string[] | null;
+  active?: boolean;
 }

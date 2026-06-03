@@ -5,173 +5,144 @@
  *
  * Renders whatever the agent asked the UI to show: menu results, the cart,
  * order history, or a confirmation screen. The agent's spoken reply is a
- * summary; this is where the details live.
+ * summary; this is where the details live. Ordering is voice-first — the cart
+ * is owned by the agent (it identifies the caller mid-conversation), so dish
+ * cards guide the caller to *say* what they want rather than tap.
  */
 
-import { useState } from "react";
 import {
   type CanvasState,
+  type CustomerCard,
   type MenuItemCard,
   type OrderCard,
-  useVoiceAgent,
 } from "@/contexts/VoiceAgentContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/api";
 import { formatDate } from "@/lib/datetime";
 
+// Warm, tandoor-leaning accents per category (used behind missing photos).
 const CATEGORY_ACCENT: Record<string, string> = {
-  starters: "from-amber-500/60 to-orange-500/40",
-  mains: "from-rose-600/60 to-red-500/40",
-  breads: "from-yellow-600/50 to-amber-500/40",
-  rice: "from-lime-600/50 to-green-500/40",
-  desserts: "from-fuchsia-500/50 to-pink-500/40",
-  beverages: "from-sky-500/50 to-cyan-500/40",
+  starters: "from-amber-600/50 to-orange-700/30",
+  mains: "from-orange-700/55 to-red-800/35",
+  breads: "from-yellow-600/45 to-amber-700/30",
+  rice: "from-lime-700/35 to-amber-700/25",
+  desserts: "from-rose-700/45 to-amber-600/25",
+  beverages: "from-amber-500/40 to-yellow-700/25",
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  cart: "bg-zinc-700/50 text-zinc-200 border-zinc-600/50",
+  cart: "bg-white/5 text-on-surface-variant border-white/10",
   confirmed: "bg-primary/15 text-primary border-primary/30",
-  awaiting_payment: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30",
+  awaiting_payment: "bg-tertiary/15 text-tertiary border-tertiary/30",
   paid: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  cancelled: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  cancelled: "bg-error/15 text-error border-error/30",
 };
 
-function DishCard({ item }: { item: MenuItemCard }) {
-  const accent = CATEGORY_ACCENT[item.category] ?? "from-zinc-500/40 to-zinc-600/30";
-  const { token } = useAuth();
-  const { setCartView } = useVoiceAgent();
-  const [adding, setAdding] = useState(false);
-  const [justAdded, setJustAdded] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+function spiceLevel(label: string | null): number {
+  if (!label) return 0;
+  const l = label.toLowerCase();
+  if (l.includes("hot") || l.includes("spicy")) return 3;
+  if (l.includes("medium")) return 2;
+  if (l.includes("mild")) return 1;
+  return 0;
+}
 
-  const addToCart = async () => {
-    if (!token || !item.available) return;
-    setAdding(true);
-    setErr(null);
-    try {
-      const order = await api.addItemToCart(token, item.id, 1);
-      // Reuse the voice agent's cart_view canvas state so the order card
-      // updates in-place, same visual as when Arjun adds an item.
-      setCartView(order as unknown as OrderCard);
-      setJustAdded(true);
-      setTimeout(() => setJustAdded(false), 1500);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setAdding(false);
-    }
-  };
+function DishCard({ item, index = 0 }: { item: MenuItemCard; index?: number }) {
+  const accent = CATEGORY_ACCENT[item.category] ?? "from-amber-700/40 to-stone-700/30";
+  const heat = spiceLevel(item.spice_level);
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-surface-container/50 backdrop-blur-xl transition-all hover:border-white/20 hover:bg-surface-container/70">
-      {/* Image (if available) falls back to accent gradient */}
-      <div className={`h-40 relative bg-gradient-to-br ${accent}`}>
+    <article
+      className="reveal group relative overflow-hidden rounded-2xl ember-card transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_18px_50px_-20px_rgba(255,106,26,0.45)]"
+      style={{ animationDelay: `${Math.min(index, 8) * 55}ms` }}
+    >
+      <div className={`h-44 relative bg-gradient-to-br ${accent}`}>
         {item.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={item.image_url}
             alt={item.name}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.07]"
             onError={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              console.warn(
-                `[DishCard] image failed to load for ${item.id} ${item.name}: ${img.src}`
-              );
-              img.style.display = "none";
+              (e.currentTarget as HTMLImageElement).style.display = "none";
             }}
           />
         ) : (
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,200,120,0.18),transparent_60%)]" />
         )}
-        {/* Dark bottom scrim so labels stay legible over any image */}
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-        <span className="absolute top-3 left-4 text-[10px] font-bold uppercase tracking-widest text-white font-headline drop-shadow">
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#140f09] via-[#140f09]/55 to-transparent" />
+        <span className="absolute top-3 left-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-on-surface drop-shadow">
           {item.category}
         </span>
-        <span className="absolute top-3 right-4 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-mono text-white/80 backdrop-blur-sm">
+        <span className="absolute top-3 right-3 rounded-full bg-black/45 px-2 py-0.5 font-mono text-[10px] text-on-surface/80 backdrop-blur-sm ring-1 ring-white/10">
           {item.id}
         </span>
+        {item.popularity != null && item.popularity >= 4.5 && (
+          <span className="absolute bottom-3 left-4 inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-2 py-0.5 text-[10px] font-semibold text-tertiary ring-1 ring-tertiary/30 backdrop-blur-sm">
+            <span className="material-symbols-outlined text-[13px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
+            Favourite
+          </span>
+        )}
       </div>
 
-      <div className="px-5 py-4 space-y-2">
+      <div className="px-5 py-4 space-y-2.5">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="font-headline font-bold text-white text-base leading-tight">
+          <h3 className="font-headline font-semibold text-on-surface text-lg leading-tight">
             {item.name}
           </h3>
-          <p className="font-headline font-extrabold text-primary whitespace-nowrap">
+          <p className="font-headline font-semibold text-secondary text-lg whitespace-nowrap tabular-nums">
             ₹{item.price}
           </p>
         </div>
 
         {item.description && (
-          <p className="text-on-surface-variant text-xs leading-relaxed line-clamp-3">
+          <p className="text-on-surface-variant text-xs leading-relaxed line-clamp-2">
             {item.description}
           </p>
         )}
 
-        <div className="flex flex-wrap gap-1.5 pt-1">
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          {heat > 0 && (
+            <span className="inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5">
+              {Array.from({ length: heat }).map((_, i) => (
+                <span
+                  key={i}
+                  className="material-symbols-outlined text-[12px] text-primary"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  local_fire_department
+                </span>
+              ))}
+            </span>
+          )}
           {item.serving && (
             <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-on-surface-variant">
               {item.serving}
             </span>
           )}
-          {item.spice_level && (
-            <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-300">
-              {item.spice_level}
-            </span>
-          )}
           {item.dietary?.map((d) => (
             <span
               key={d}
-              className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300"
+              className="rounded-full border border-secondary/25 bg-secondary/10 px-2 py-0.5 text-[10px] text-secondary-fixed"
             >
               {d}
             </span>
           ))}
         </div>
 
-        {/* Tap-to-add fallback for customers who can't (or don't want to)
-             speak to the agent. Voice path still works in parallel. */}
-        <div className="pt-3">
-          <button
-            onClick={addToCart}
-            disabled={!item.available || adding}
-            className={`w-full flex items-center justify-center gap-2 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${
-              !item.available
-                ? "bg-white/5 text-on-surface-variant cursor-not-allowed"
-                : justAdded
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                  : "bg-primary text-on-primary hover:brightness-110 active:scale-95 shadow-lg shadow-primary/20"
-            } disabled:opacity-50`}
-          >
-            {!item.available ? (
-              "Unavailable"
-            ) : adding ? (
-              <>
-                <span className="material-symbols-outlined text-[16px] animate-spin">
-                  progress_activity
-                </span>
-                Adding…
-              </>
-            ) : justAdded ? (
-              <>
-                <span
-                  className="material-symbols-outlined text-[16px]"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  check
-                </span>
-                Added
-              </>
-            ) : (
-              <>
-                <span className="material-symbols-outlined text-[16px]">add</span>
-                Add to cart
-              </>
-            )}
-          </button>
-          {err && (
-            <p className="text-error text-[10px] mt-2 text-center">{err}</p>
+        <div className="pt-2">
+          {item.available ? (
+            <div className="flex items-center gap-2 text-[11px] text-on-surface-variant">
+              <span
+                className="material-symbols-outlined text-[15px] text-primary"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                mic
+              </span>
+              Just say <span className="text-on-surface font-medium">“add {item.name}”</span>
+            </div>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-error/80">
+              Sold out
+            </span>
           )}
         </div>
       </div>
@@ -187,14 +158,14 @@ function OrderLineItem({ name, quantity, lineTotal, note }: {
 }) {
   return (
     <div className="flex items-start gap-3 py-3">
-      <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-on-surface-variant shrink-0">
+      <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary shrink-0 tabular-nums">
         {quantity}×
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-medium">{name}</p>
+        <p className="text-on-surface text-sm font-medium">{name}</p>
         {note && <p className="text-on-surface-variant text-xs italic mt-0.5">{note}</p>}
       </div>
-      <p className="font-headline font-bold text-white text-sm whitespace-nowrap">
+      <p className="font-headline font-semibold text-on-surface text-sm whitespace-nowrap tabular-nums">
         ₹{lineTotal}
       </p>
     </div>
@@ -213,21 +184,17 @@ function OrderSummaryCard({
   const badge = STATUS_BADGE[order.status] ?? STATUS_BADGE.cart;
   const border = highlight ? "border-primary/40 ring-1 ring-primary/20" : "border-white/10";
   return (
-    <article
-      className={`rounded-2xl border ${border} bg-surface-container/50 backdrop-blur-xl overflow-hidden`}
-    >
+    <article className={`reveal rounded-2xl border ${border} ember-card overflow-hidden`}>
       <header className="flex items-center justify-between px-5 py-3 border-b border-white/5">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant font-headline">
-            {title ?? "Order"} · #{order.id.slice(0, 8).toUpperCase()}
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant">
+            {title ?? "Order"} · <span className="font-mono">#{order.id.slice(0, 8).toUpperCase()}</span>
           </p>
           <p className="text-on-surface-variant text-xs mt-0.5">
             {formatDate(order.created_at)}
           </p>
         </div>
-        <span
-          className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest font-headline ${badge}`}
-        >
+        <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${badge}`}>
           {order.status.replace("_", " ")}
         </span>
       </header>
@@ -245,8 +212,8 @@ function OrderSummaryCard({
           ))}
         </div>
       ) : (
-        <div className="px-5 py-6 text-center text-on-surface-variant text-sm">
-          Empty
+        <div className="px-5 py-8 text-center text-on-surface-variant text-sm">
+          Nothing here yet — tell Arjun what you’d like.
         </div>
       )}
 
@@ -254,16 +221,12 @@ function OrderSummaryCard({
         <div className="px-5 py-3 border-t border-white/5 space-y-1.5 text-xs">
           <div className="flex justify-between">
             <span className="text-on-surface-variant">Subtotal</span>
-            <span className="text-white font-medium">
-              ₹{order.subtotal.toFixed(2)}
-            </span>
+            <span className="text-on-surface font-medium tabular-nums">₹{order.subtotal.toFixed(2)}</span>
           </div>
           {order.charges.map((c) => (
             <div key={c.label} className="flex justify-between">
               <span className="text-on-surface-variant">{c.label}</span>
-              <span className="text-white font-medium">
-                ₹{c.amount.toFixed(2)}
-              </span>
+              <span className="text-on-surface font-medium tabular-nums">₹{c.amount.toFixed(2)}</span>
             </div>
           ))}
         </div>
@@ -273,7 +236,7 @@ function OrderSummaryCard({
         <span className="text-on-surface-variant text-xs">
           {order.item_count} item{order.item_count === 1 ? "" : "s"} · incl. charges
         </span>
-        <span className="font-headline font-extrabold text-white text-lg">
+        <span className="font-headline font-semibold text-secondary text-xl tabular-nums">
           ₹{order.total.toFixed(2)}
         </span>
       </footer>
@@ -284,20 +247,18 @@ function OrderSummaryCard({
 // --- Canvas root --------------------------------------------------------
 
 export function Canvas({ canvas }: { canvas: CanvasState }) {
-  if (canvas.kind === "idle") {
-    return <IdleState />;
-  }
+  if (canvas.kind === "idle") return <IdleState />;
 
   if (canvas.kind === "menu_results") {
     return (
-      <section className="space-y-4">
-        <CanvasHeader title={canvas.title} subtitle={`${canvas.items.length} item(s)`} />
+      <section className="space-y-5">
+        <CanvasHeader title={canvas.title} subtitle={`${canvas.items.length} dish${canvas.items.length === 1 ? "" : "es"}`} />
         {canvas.items.length === 0 ? (
-          <EmptyState icon="search_off" message="No dishes found." />
+          <EmptyState icon="search_off" message="No dishes match that — try another flavour." />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {canvas.items.map((item) => (
-              <DishCard key={item.id} item={item} />
+            {canvas.items.map((item, i) => (
+              <DishCard key={item.id} item={item} index={i} />
             ))}
           </div>
         )}
@@ -307,8 +268,8 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
 
   if (canvas.kind === "cart_view") {
     return (
-      <section className="space-y-4">
-        <CanvasHeader title="Your Cart" subtitle={`${canvas.order.item_count} item(s)`} />
+      <section className="space-y-5 max-w-2xl mx-auto w-full">
+        <CanvasHeader title="Your order" subtitle={`${canvas.order.item_count} item(s) in progress`} />
         <OrderSummaryCard order={canvas.order} title="Cart" />
       </section>
     );
@@ -320,10 +281,10 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
       .map(([status, n]) => `${n} ${status.replace("_", " ")}`)
       .join(" · ");
     return (
-      <section className="space-y-4">
+      <section className="space-y-5">
         <CanvasHeader title={canvas.title} subtitle={counts} />
         {canvas.orders.length === 0 ? (
-          <EmptyState icon="inbox" message="No orders in this view." />
+          <EmptyState icon="inbox" message="No orders in this view yet." />
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {canvas.orders.map((o) => (
@@ -335,23 +296,38 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
     );
   }
 
+  if (canvas.kind === "customer_card") {
+    return (
+      <section className="max-w-md mx-auto w-full">
+        <CustomerProfileCard customer={canvas.customer} />
+      </section>
+    );
+  }
+
+  if (canvas.kind === "delivery_check") {
+    return (
+      <section className="max-w-md mx-auto w-full">
+        <DeliveryCheckCard
+          query={canvas.query}
+          serviceable={canvas.serviceable}
+          matched={canvas.matched}
+        />
+      </section>
+    );
+  }
+
   if (canvas.kind === "session_end") {
     return (
-      <section className="flex flex-col items-center justify-center py-24 text-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-          <span
-            className="material-symbols-outlined text-on-surface-variant text-3xl"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
+      <section className="flex flex-col items-center justify-center py-24 text-center gap-4 reveal">
+        <div className="w-16 h-16 rounded-full ember-card flex items-center justify-center">
+          <span className="material-symbols-outlined text-tertiary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
             waving_hand
           </span>
         </div>
         <div>
-          <h3 className="font-headline font-extrabold text-white text-lg">
-            Conversation ended
-          </h3>
+          <h3 className="font-headline font-semibold text-on-surface text-2xl">Until next time</h3>
           <p className="text-on-surface-variant text-sm max-w-sm mt-2 leading-relaxed">
-            Tap the mic below anytime to start a new conversation.
+            Tap the mic below whenever you’re hungry again.
           </p>
         </div>
       </section>
@@ -360,24 +336,19 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
 
   if (canvas.kind === "order_confirmed") {
     return (
-      <section className="space-y-5">
-        <div className="flex flex-col items-center text-center gap-3 py-6">
+      <section className="space-y-6 max-w-2xl mx-auto w-full">
+        <div className="flex flex-col items-center text-center gap-3 py-6 reveal">
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/5 flex items-center justify-center ring-2 ring-primary/40 shadow-2xl shadow-primary/30">
-              <span
-                className="material-symbols-outlined text-primary text-4xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
-              >
-                check_circle
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/40 to-primary/5 flex items-center justify-center ring-2 ring-primary/40 animate-breathe">
+              <span className="material-symbols-outlined text-primary text-5xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                local_shipping
               </span>
             </div>
-            <div className="absolute inset-0 rounded-full bg-primary/20 blur-2xl -z-10" />
+            <div className="absolute inset-0 rounded-full bg-primary/25 blur-3xl -z-10" />
           </div>
-          <h2 className="font-headline font-extrabold text-2xl text-white">
-            Order Confirmed
-          </h2>
-          <p className="text-on-surface-variant text-sm">
-            The kitchen has your order. Estimated prep time 20–25 minutes.
+          <h2 className="font-headline font-semibold text-3xl text-on-surface">Order on its way</h2>
+          <p className="text-on-surface-variant text-sm max-w-sm">
+            The kitchen has it. Fresh off the tandoor and out for delivery in about 30–40 minutes.
           </p>
         </div>
         <OrderSummaryCard order={canvas.order} title="Confirmed" highlight />
@@ -388,14 +359,128 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
   return null;
 }
 
+function CustomerProfileCard({ customer }: { customer: CustomerCard }) {
+  const addr = [customer.address_line, customer.area, customer.pincode]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <div className="reveal ember-card rounded-2xl overflow-hidden">
+      <div className="px-6 pt-6 pb-5 text-center border-b border-white/5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-on-surface-variant mb-2">
+          {customer.order_count > 0 ? "Welcome back" : "New regular"}
+        </p>
+        <h3 className="font-headline font-semibold text-on-surface text-2xl">
+          {customer.name || "Guest"}
+        </h3>
+        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary/10 ring-1 ring-primary/25 px-3 py-1">
+          <span className="material-symbols-outlined text-primary text-[15px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+            confirmation_number
+          </span>
+          <span className="font-mono text-primary text-sm tracking-[0.3em]">{customer.code}</span>
+        </div>
+      </div>
+      <div className="px-6 py-4 space-y-3 text-sm">
+        {customer.phone && (
+          <ProfileRow icon="call" label="Phone" value={customer.phone} />
+        )}
+        {addr && <ProfileRow icon="location_on" label="Deliver to" value={addr} />}
+        {customer.landmark && (
+          <ProfileRow icon="signpost" label="Landmark" value={customer.landmark} />
+        )}
+        {customer.preferences && (
+          <ProfileRow icon="favorite" label="Likes" value={customer.preferences} tint="tertiary" />
+        )}
+        {customer.allergies && (
+          <ProfileRow icon="warning" label="Avoid" value={customer.allergies} tint="error" />
+        )}
+        {customer.order_count > 0 && (
+          <ProfileRow
+            icon="receipt_long"
+            label="History"
+            value={`${customer.order_count} order${customer.order_count === 1 ? "" : "s"} with us`}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProfileRow({
+  icon,
+  label,
+  value,
+  tint,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  tint?: "tertiary" | "error";
+}) {
+  const tone =
+    tint === "tertiary" ? "text-tertiary" : tint === "error" ? "text-error" : "text-primary";
+  return (
+    <div className="flex items-start gap-3">
+      <span className={`material-symbols-outlined text-[18px] mt-0.5 ${tone}`} style={{ fontVariationSettings: "'FILL' 1" }}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-on-surface-variant">{label}</p>
+        <p className="text-on-surface leading-snug">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function DeliveryCheckCard({
+  query,
+  serviceable,
+  matched,
+}: {
+  query: string;
+  serviceable: boolean;
+  matched: string | null;
+}) {
+  return (
+    <div
+      className={`reveal ember-card rounded-2xl p-6 text-center ${
+        serviceable ? "ring-1 ring-emerald-500/25" : "ring-1 ring-error/25"
+      }`}
+    >
+      <div
+        className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
+          serviceable ? "bg-emerald-500/15" : "bg-error/15"
+        }`}
+      >
+        <span
+          className={`material-symbols-outlined text-3xl ${serviceable ? "text-emerald-400" : "text-error"}`}
+          style={{ fontVariationSettings: "'FILL' 1" }}
+        >
+          {serviceable ? "where_to_vote" : "wrong_location"}
+        </span>
+      </div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-on-surface-variant mb-1">
+        Delivery check
+      </p>
+      <h3 className="font-headline font-semibold text-on-surface text-2xl capitalize">{query}</h3>
+      {serviceable ? (
+        <p className="text-on-surface-variant text-sm mt-2">
+          Yes — we deliver here{matched ? ` (${matched})` : ""}. 🛵
+        </p>
+      ) : (
+        <p className="text-on-surface-variant text-sm mt-2">
+          Sorry, that’s outside our delivery range from Bandra West.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CanvasHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div>
-      <h2 className="font-headline font-extrabold text-xl text-white">{title}</h2>
+    <div className="reveal">
+      <h2 className="font-headline font-semibold text-2xl text-on-surface">{title}</h2>
       {subtitle && (
-        <p className="text-on-surface-variant text-xs mt-1 uppercase tracking-wider font-headline">
-          {subtitle}
-        </p>
+        <p className="text-on-surface-variant text-[11px] mt-1 uppercase tracking-[0.18em]">{subtitle}</p>
       )}
     </div>
   );
@@ -404,9 +489,7 @@ function CanvasHeader({ title, subtitle }: { title: string; subtitle?: string })
 function EmptyState({ icon, message }: { icon: string; message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-white/10">
-      <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">
-        {icon}
-      </span>
+      <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">{icon}</span>
       <p className="text-on-surface-variant text-sm">{message}</p>
     </div>
   );
@@ -415,21 +498,15 @@ function EmptyState({ icon, message }: { icon: string; message: string }) {
 function IdleState() {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-      <div className="w-16 h-16 rounded-full glass-panel flex items-center justify-center">
-        <span
-          className="material-symbols-outlined text-primary text-3xl"
-          style={{ fontVariationSettings: "'FILL' 1" }}
-        >
-          auto_awesome
+      <div className="w-16 h-16 rounded-full ember-card flex items-center justify-center">
+        <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+          local_fire_department
         </span>
       </div>
       <div>
-        <h3 className="font-headline font-extrabold text-white text-lg">
-          Talk to Arjun
-        </h3>
+        <h3 className="font-headline font-semibold text-on-surface text-2xl">Talk to Arjun</h3>
         <p className="text-on-surface-variant text-sm max-w-sm mt-2 leading-relaxed">
-          Tap the mic and ask about the menu, place an order, or check your
-          history. Results show up here as you speak.
+          Tap the mic and ask about the menu or place an order. Everything you say shows up here.
         </p>
       </div>
     </div>

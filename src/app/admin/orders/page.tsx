@@ -79,7 +79,9 @@ export default function AdminOrdersPage() {
         (o) =>
           o.id.toLowerCase().includes(q) ||
           o.customer_email.toLowerCase().includes(q) ||
-          o.customer_name.toLowerCase().includes(q)
+          o.customer_name.toLowerCase().includes(q) ||
+          (o.customer_code?.toLowerCase().includes(q) ?? false) ||
+          (o.contact_phone?.toLowerCase().includes(q) ?? false)
       );
     }
     out = [...out].sort((a, b) => {
@@ -195,8 +197,8 @@ export default function AdminOrdersPage() {
                 onClick={() => setFilter(f)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                   filter === f
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600 hover:bg-zinc-200"
+                    ? "bg-primary text-on-primary"
+                    : "text-ink-soft hover:bg-paper-sunken"
                 }`}
               >
                 {FILTER_LABEL[f]}
@@ -212,7 +214,7 @@ export default function AdminOrdersPage() {
           <div className="flex-1" />
           {selected.size > 0 && (
             <>
-              <span className="text-xs text-zinc-500 mr-1">
+              <span className="text-xs text-ink-soft mr-1">
                 {selected.size} selected
               </span>
               <Button
@@ -242,12 +244,12 @@ export default function AdminOrdersPage() {
 
           {loading && orders.length === 0 && (
             <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
             </div>
           )}
 
           {!loading && orders.length === 0 && (
-            <Card className="py-16 text-center text-sm text-zinc-500">
+            <Card className="py-16 text-center text-sm text-ink-soft">
               No {FILTER_LABEL[filter].toLowerCase()} orders.
             </Card>
           )}
@@ -256,8 +258,8 @@ export default function AdminOrdersPage() {
             <Card className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-zinc-50 border-b border-zinc-200">
-                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <thead className="bg-paper-sunken/50 border-b border-line">
+                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                       <th className="px-3 py-2 w-10">
                         <input
                           type="checkbox"
@@ -306,8 +308,8 @@ export default function AdminOrdersPage() {
                         <>
                           <tr
                             key={order.id}
-                            className={`border-b border-zinc-100 hover:bg-zinc-50 ${
-                              isSelected ? "bg-zinc-50/70" : ""
+                            className={`border-b border-line hover:bg-paper-sunken/60 ${
+                              isSelected ? "bg-paper-sunken/40" : ""
                             } ${busy ? "opacity-60" : ""}`}
                           >
                             <td className="px-3 py-2">
@@ -322,7 +324,7 @@ export default function AdminOrdersPage() {
                             <td className="px-3 py-2">
                               <button
                                 onClick={() => toggleExpand(order.id)}
-                                className="text-zinc-500 hover:text-zinc-900"
+                                className="text-ink-soft hover:text-ink"
                                 aria-label="Toggle items"
                               >
                                 <span className="material-symbols-outlined text-[18px] leading-none">
@@ -330,24 +332,33 @@ export default function AdminOrdersPage() {
                                 </span>
                               </button>
                             </td>
-                            <td className="px-3 py-2 font-mono text-xs text-zinc-700">
+                            <td className="px-3 py-2 font-mono text-xs text-ink-soft">
                               #{order.id.slice(0, 8).toUpperCase()}
                             </td>
                             <td className="px-3 py-2">
-                              <div className="font-medium text-zinc-900 truncate max-w-[200px]">
+                              <div className="font-medium text-ink truncate max-w-[200px]">
                                 {order.customer_name || "—"}
                               </div>
-                              <div className="text-xs text-zinc-500 truncate max-w-[200px]">
-                                {order.customer_email}
+                              <div className="text-xs text-ink-soft truncate max-w-[200px]">
+                                {order.customer_code ? (
+                                  <>
+                                    <span className="font-mono tracking-widest">
+                                      {order.customer_code}
+                                    </span>
+                                    {order.contact_phone ? ` · ${order.contact_phone}` : ""}
+                                  </>
+                                ) : (
+                                  order.customer_email
+                                )}
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-zinc-700">
+                            <td className="px-3 py-2 text-ink-soft">
                               {order.item_count}
                             </td>
-                            <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">
+                            <td className="px-3 py-2 text-ink-soft whitespace-nowrap">
                               {formatDate(order.created_at)}
                             </td>
-                            <td className="px-3 py-2 text-right font-medium text-zinc-900 tabular-nums">
+                            <td className="px-3 py-2 text-right font-medium text-ink tabular-nums">
                               {formatPrice(order.total)}
                             </td>
                             <td className="px-3 py-2">
@@ -374,37 +385,55 @@ export default function AdminOrdersPage() {
                                   </Button>
                                 </div>
                               ) : (
-                                <span className="text-xs text-zinc-400">—</span>
+                                <span className="text-xs text-ink-faint">—</span>
                               )}
                             </td>
                           </tr>
                           {isExpanded && (
-                            <tr className="border-b border-zinc-100 bg-zinc-50/50">
+                            <tr className="border-b border-line bg-paper-sunken/40">
                               <td colSpan={9} className="px-6 py-3">
+                                {(order.delivery_address || order.delivery_area) && (
+                                  <div className="mb-3 flex items-start gap-2 text-sm">
+                                    <span className="material-symbols-outlined text-[16px] text-ink-faint mt-0.5">
+                                      local_shipping
+                                    </span>
+                                    <div className="text-ink-soft">
+                                      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft mr-2">
+                                        Deliver to
+                                      </span>
+                                      {order.delivery_address || order.delivery_area}
+                                      {order.delivery_area && order.delivery_address
+                                        ? `, ${order.delivery_area}`
+                                        : ""}
+                                      {order.delivery_pincode ? ` — ${order.delivery_pincode}` : ""}
+                                      {order.contact_phone ? ` · ☎ ${order.contact_phone}` : ""}
+                                    </div>
+                                  </div>
+                                )}
                                 <ul className="space-y-1 text-sm">
                                   {order.items.map((it) => (
                                     <li
                                       key={it.id}
                                       className="flex items-start gap-3"
                                     >
-                                      <span className="w-8 text-zinc-500 tabular-nums">
+                                      <span className="w-8 text-ink-soft tabular-nums">
                                         {it.quantity}×
                                       </span>
-                                      <span className="flex-1 text-zinc-900">
+                                      <span className="flex-1 text-ink">
                                         {it.name}
                                         {it.special_instructions && (
-                                          <span className="text-zinc-500 italic ml-2">
+                                          <span className="text-ink-soft italic ml-2">
                                             ({it.special_instructions})
                                           </span>
                                         )}
                                       </span>
-                                      <span className="text-zinc-700 tabular-nums">
+                                      <span className="text-ink-soft tabular-nums">
                                         {formatPrice(it.line_total)}
                                       </span>
                                     </li>
                                   ))}
                                 </ul>
-                                <div className="mt-3 flex justify-end gap-8 text-xs text-zinc-600">
+                                <div className="mt-3 flex justify-end gap-8 text-xs text-ink-soft">
                                   <div>
                                     <div className="flex justify-between gap-6">
                                       <span>Subtotal</span>
@@ -423,7 +452,7 @@ export default function AdminOrdersPage() {
                                         </span>
                                       </div>
                                     ))}
-                                    <div className="flex justify-between gap-6 font-semibold text-zinc-900 pt-1 border-t border-zinc-200 mt-1">
+                                    <div className="flex justify-between gap-6 font-semibold text-ink pt-1 border-t border-line mt-1">
                                       <span>Total</span>
                                       <span className="tabular-nums">
                                         {formatPrice(order.total)}
@@ -467,11 +496,11 @@ function SortableTh({
   return (
     <th
       onClick={() => onClick(k)}
-      className={`px-3 py-2 cursor-pointer select-none hover:text-zinc-900 ${
+      className={`px-3 py-2 cursor-pointer select-none hover:text-ink ${
         right ? "text-right" : ""
       }`}
     >
-      <span className={`inline-flex items-center gap-1 ${active ? "text-zinc-900" : ""}`}>
+      <span className={`inline-flex items-center gap-1 ${active ? "text-ink" : ""}`}>
         {label}
         {active && (
           <span className="material-symbols-outlined text-[12px] leading-none">

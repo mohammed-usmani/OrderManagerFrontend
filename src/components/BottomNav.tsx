@@ -9,16 +9,16 @@ interface NavItem {
   label: string;
 }
 
-const CUSTOMER_NAV: NavItem[] = [
-  { href: "/chat", icon: "chat_bubble", label: "Chat" },
-  { href: "/orders", icon: "receipt_long", label: "Orders" },
-  { href: "/profile", icon: "person", label: "Profile" },
+const PUBLIC_NAV: NavItem[] = [
+  { href: "/", icon: "home", label: "Home" },
+  { href: "/chat", icon: "mic", label: "Order" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", icon: "dashboard", label: "Home" },
   { href: "/admin/orders", icon: "soup_kitchen", label: "Kitchen" },
   { href: "/admin/menu", icon: "restaurant_menu", label: "Menu" },
+  { href: "/admin/customers", icon: "groups", label: "Customers" },
   { href: "/profile", icon: "person", label: "Profile" },
 ];
 
@@ -40,7 +40,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
-  const visibleItems = user?.is_admin ? ADMIN_NAV : CUSTOMER_NAV;
+  const visibleItems = user?.is_admin ? ADMIN_NAV : PUBLIC_NAV;
   const activeRoute = activeHref(pathname, visibleItems);
 
   return (

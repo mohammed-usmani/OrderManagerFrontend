@@ -88,6 +88,20 @@ export interface OrderCard {
   total: number; // subtotal + all charges
 }
 
+export interface CustomerCard {
+  id: string;
+  code: string;
+  name: string | null;
+  phone: string | null;
+  address_line: string | null;
+  area: string | null;
+  pincode: string | null;
+  landmark: string | null;
+  preferences: string | null;
+  allergies: string | null;
+  order_count: number;
+}
+
 export type CanvasState =
   | { kind: "idle" }
   | { kind: "menu_results"; title: string; items: MenuItemCard[] }
@@ -99,6 +113,13 @@ export type CanvasState =
       counts: Record<string, number>;
     }
   | { kind: "order_confirmed"; order: OrderCard }
+  | { kind: "customer_card"; customer: CustomerCard }
+  | {
+      kind: "delivery_check";
+      query: string;
+      serviceable: boolean;
+      matched: string | null;
+    }
   | { kind: "session_end"; reason: string };
 
 // --- Context -----------------------------------------------------------
@@ -236,6 +257,24 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           setCanvas({ kind: "order_confirmed", order: data as OrderCard });
           break;
         }
+        case "customer_card": {
+          setCanvas({ kind: "customer_card", customer: data as CustomerCard });
+          break;
+        }
+        case "delivery_check": {
+          const d = data as {
+            query: string;
+            serviceable: boolean;
+            matched: string | null;
+          };
+          setCanvas({
+            kind: "delivery_check",
+            query: d.query,
+            serviceable: d.serviceable,
+            matched: d.matched,
+          });
+          break;
+        }
         case "session_end": {
           const reason = ((data as { reason?: string })?.reason) ?? "goodbye";
           setCanvas({ kind: "session_end", reason });
@@ -313,14 +352,15 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
 
     setStatus("connecting");
 
+    // The voice line is public — fetch an anonymous ws-ticket (token is only
+    // present for logged-in staff). The backend requires a ticket but no auth.
     let wsUrl = WS_URL;
-    if (token) {
-      try {
-        const { ticket } = await api.getWsTicket(token, getUserTimezone());
-        wsUrl = `${WS_URL}?ticket=${ticket}`;
-      } catch {
-        // server will reject if ticket is required
-      }
+    try {
+      const { ticket } = await api.getWsTicket(token ?? undefined, getUserTimezone());
+      wsUrl = `${WS_URL}?ticket=${ticket}`;
+    } catch {
+      setStatus("disconnected");
+      return;
     }
 
     const ws = new WebSocket(wsUrl);

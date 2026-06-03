@@ -1,119 +1,253 @@
 @import "tailwindcss";
 
-@theme inline {
-  /* --- Saffron & Smoke Color System --- */
-  --color-on-surface-variant: #c4c7c7;
-  --color-on-tertiary: #003053;
-  --color-surface-dim: #0e0e0e;
-  --color-primary-fixed: #00f4fe;
-  --color-on-tertiary-container: #002440;
-  --color-on-surface: #ffffff;
-  --color-surface-container: #1a1a1a;
-  --color-on-primary-fixed: #004346;
-  --color-outline-variant: #484847;
-  --color-on-primary-fixed-variant: #006266;
-  --color-surface-bright: #2c2c2c;
-  --color-on-tertiary-fixed: #00192f;
-  --color-surface-container-lowest: #000000;
-  --color-on-error-container: #ffa8a3;
-  --color-surface: #0e0e0e;
-  --color-error-dim: #d7383b;
-  --color-background: #0e0e0e;
-  --color-tertiary-container: #45a6fa;
-  --color-on-secondary: #280067;
-  --color-secondary-container: #5516be;
-  --color-on-primary-container: #00575b;
-  --color-surface-container-highest: #262626;
-  --color-tertiary: #64b3ff;
-  --color-primary: #a1faff;
-  --color-secondary-fixed: #dac9ff;
-  --color-primary-container: #00f4fe;
-  --color-on-background: #ffffff;
-  --color-primary-fixed-dim: #00e5ee;
-  --color-surface-tint: #a1faff;
-  --color-primary-dim: #00e5ee;
-  --color-tertiary-dim: #41a3f7;
-  --color-secondary-fixed-dim: #ceb9ff;
-  --color-error: #ff716c;
-  --color-secondary: #ac8aff;
-  --color-tertiary-fixed-dim: #49a8fc;
-  --color-on-secondary-fixed: #40009b;
-  --color-outline: #767575;
-  --color-on-error: #490006;
-  --color-error-container: #9f0519;
-  --color-surface-container-low: #131313;
-  --color-inverse-surface: #fcf9f8;
-  --color-inverse-primary: #006a6e;
-  --color-on-secondary-fixed-variant: #5f28c8;
-  --color-inverse-on-surface: #565555;
-  --color-surface-container-high: #20201f;
-  --color-on-secondary-container: #d9c8ff;
-  --color-secondary-dim: #8455ef;
-  --color-on-primary: #006165;
-  --color-tertiary-fixed: #6bb6ff;
-  --color-on-tertiary-fixed-variant: #003c65;
-  --color-surface-variant: #262626;
+/* ============================================================
+   SAFFRON & SMOKE — "Ember & Brass"
+   Warm, smoky, editorial fine-dining. Charcoal & smoke darks,
+   ember/saffron accents, brass highlights, cream type.
+   Token NAMES are preserved from the old MD3 set so existing
+   components inherit the new palette; only the VALUES changed.
+   ============================================================ */
 
-  /* --- Border Radius --- */
+@theme inline {
+  /* --- Core surfaces (warm charcoal / smoke) --- */
+  --color-background: #15110d;
+  --color-on-background: #f3e9d8;
+  --color-surface: #15110d;
+  --color-surface-dim: #120e09;
+  --color-surface-bright: #2e2418;
+  --color-on-surface: #f3e9d8;
+  --color-on-surface-variant: #b8a892;        /* warm ash — secondary text */
+  --color-surface-container-lowest: #0c0906;
+  --color-surface-container-low: #1a140e;
+  --color-surface-container: #211a12;
+  --color-surface-container-high: #2a2016;
+  --color-surface-container-highest: #332618;
+  --color-surface-variant: #2a2016;
+  --color-surface-tint: #ff6a1a;
+
+  /* --- Primary = EMBER --- */
+  --color-primary: #ff6a1a;
+  --color-on-primary: #2a1303;
+  --color-primary-container: #ff8a3d;
+  --color-on-primary-container: #ffd9c2;
+  --color-primary-dim: #e85d12;
+  --color-primary-fixed: #ffb37a;
+  --color-primary-fixed-dim: #ff9a52;
+  --color-on-primary-fixed: #2a1303;
+  --color-on-primary-fixed-variant: #7a3a10;
+
+  /* --- Secondary = BRASS / GOLD --- */
+  --color-secondary: #c9a227;
+  --color-on-secondary: #241b00;
+  --color-secondary-container: #6e5a10;
+  --color-on-secondary-container: #f2da8e;
+  --color-secondary-dim: #b08e1e;
+  --color-secondary-fixed: #f2da8e;
+  --color-secondary-fixed-dim: #e6c766;
+  --color-on-secondary-fixed: #221900;
+  --color-on-secondary-fixed-variant: #574600;
+
+  /* --- Tertiary = SAFFRON / TURMERIC --- */
+  --color-tertiary: #f4a300;
+  --color-on-tertiary: #2a1a00;
+  --color-tertiary-container: #c77e00;
+  --color-on-tertiary-container: #ffd9a0;
+  --color-tertiary-dim: #d99400;
+  --color-tertiary-fixed: #ffbf4d;
+  --color-tertiary-fixed-dim: #d99400;
+  --color-on-tertiary-fixed: #2a1a00;
+  --color-on-tertiary-fixed-variant: #5a3a00;
+
+  /* --- Error = warm chili red --- */
+  --color-error: #ff6b5e;
+  --color-on-error: #3a0908;
+  --color-error-container: #7a1410;
+  --color-on-error-container: #ffd2cc;
+  --color-error-dim: #c43a36;
+
+  /* --- Back-of-house (warm "paper" admin neutrals) --- */
+  --color-paper: #f1e7d6;          /* admin page background */
+  --color-paper-raised: #fbf6ee;   /* cards / inputs */
+  --color-paper-sunken: #eaddc9;   /* table headers / toolbars */
+  --color-line: #e3d6c1;           /* hairline borders */
+  --color-line-strong: #d4c3a8;
+  --color-ink: #2a2016;            /* primary text */
+  --color-ink-soft: #6f5d46;       /* muted text */
+  --color-ink-faint: #9c8a70;
+
+  /* --- Lines / inverse --- */
+  --color-outline: #5a4a38;
+  --color-outline-variant: #3a2e22;
+  --color-inverse-surface: #f3e9d8;
+  --color-inverse-on-surface: #3a2e22;
+  --color-inverse-primary: #c24a00;
+
+  /* --- Radius --- */
   --radius: 1rem;
   --radius-lg: 1.5rem;
   --radius-xl: 2rem;
 
   /* --- Fonts --- */
-  --font-headline: "Manrope", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-label: "Inter", sans-serif;
+  --font-headline: "Fraunces", Georgia, serif;   /* display serif */
+  --font-body: "Hanken Grotesk", system-ui, sans-serif;
+  --font-label: "Hanken Grotesk", system-ui, sans-serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, monospace;
 }
+
+/* ---------------- Base ---------------- */
 
 body {
-  background-color: #0e0e0e;
-  color: #ffffff;
+  background-color: #15110d;
+  color: #f3e9d8;
   font-family: var(--font-body);
   min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
 }
 
-.glass-panel {
-  background: rgba(26, 26, 26, 0.6);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+/* Fraunces is a high-contrast variable serif — let it breathe at display
+   optical size with tight tracking so headlines feel editorial. */
+.font-headline {
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0;
+  letter-spacing: -0.015em;
 }
 
+/* Tabular, characterful numerals for prices / codes / metrics. */
+.font-mono,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Atmosphere ---------------- */
+
+/* Ember glow: warm radial light from the tandoor, over charcoal. */
+.ember-glow {
+  background:
+    radial-gradient(1100px 620px at 8% -10%, rgba(255, 106, 26, 0.16), transparent 60%),
+    radial-gradient(900px 560px at 100% 8%, rgba(244, 163, 0, 0.10), transparent 62%),
+    radial-gradient(1000px 700px at 50% 120%, rgba(201, 162, 39, 0.08), transparent 60%),
+    #14100c;
+  min-height: 100dvh;
+}
+/* Back-compat alias (anything still referencing the old class). */
 .oracle-glow {
   background:
-    radial-gradient(1200px 600px at 0% -20%, rgba(0, 106, 110, 0.18), transparent 60%),
-    radial-gradient(900px 500px at 100% 110%, rgba(85, 22, 190, 0.16), transparent 60%),
-    radial-gradient(800px 400px at 50% 0%, rgba(161, 250, 255, 0.04), transparent 70%),
-    #0a0a0b;
+    radial-gradient(1100px 620px at 8% -10%, rgba(255, 106, 26, 0.16), transparent 60%),
+    radial-gradient(900px 560px at 100% 8%, rgba(244, 163, 0, 0.10), transparent 62%),
+    radial-gradient(1000px 700px at 50% 120%, rgba(201, 162, 39, 0.08), transparent 60%),
+    #14100c;
   min-height: 100dvh;
 }
 
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Film grain — a faint smoke/texture layer over the whole UI. Non-blocking. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
+
+@media print {
+  body::after { display: none; }
+}
+
+/* ---------------- Surfaces ---------------- */
+
+.glass-panel {
+  background: rgba(33, 26, 18, 0.62);
+  backdrop-filter: blur(20px) saturate(1.1);
+  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  border: 1px solid rgba(244, 163, 0, 0.12);
+}
+
+/* A warmer raised card with a hairline ember top-edge highlight. */
+.ember-card {
+  background:
+    linear-gradient(180deg, rgba(255, 106, 26, 0.05), transparent 120px),
+    rgba(33, 26, 18, 0.7);
+  border: 1px solid rgba(244, 163, 0, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
 
 .message-bubble {
   max-width: 88%;
   word-wrap: break-word;
 }
 
-/* --- Print: show ONLY the receipt, hide the rest of the app ------------ */
+/* ---------------- Motion ---------------- */
 
-/* On screen the receipt area is not rendered; it only exists so the browser
-   can print it. */
-.receipt-print-area {
-  display: none;
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes rise-sm {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 106, 26, 0.45); }
+  50%      { transform: scale(1.04); box-shadow: 0 0 60px 12px rgba(255, 106, 26, 0.35); }
+}
+@keyframes ember-float {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  15%  { opacity: 0.8; }
+  100% { transform: translateY(-90px) scale(0.3); opacity: 0; }
+}
+@keyframes shimmer {
+  100% { background-position: 200% 0; }
+}
+@keyframes slow-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 28s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
 }
 
+.reveal { animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.reveal-sm { animation: rise-sm 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-breathe { animation: breathe 3.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal-sm, .animate-breathe { animation: none !important; }
+}
+
+/* Skeleton shimmer for loading states. */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(244, 163, 0, 0.06) 25%,
+    rgba(244, 163, 0, 0.14) 37%,
+    rgba(244, 163, 0, 0.06) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* ---------------- Print: receipt only ---------------- */
+
+.receipt-print-area { display: none; }
+
 @media print {
-  /* Hide everything that isn't the receipt. */
-  body * {
-    visibility: hidden;
-  }
+  body * { visibility: hidden; }
   .receipt-print-area,
-  .receipt-print-area * {
-    visibility: visible;
-  }
+  .receipt-print-area * { visibility: visible; }
   .receipt-print-area {
     display: block !important;
     position: absolute;
@@ -123,7 +257,6 @@ body {
     color: #000 !important;
     background: #fff !important;
   }
-  /* Use A5 (standard small-bill size in India) with tight margins. */
   @page {
     size: A5 portrait;
     margin: 8mm;
