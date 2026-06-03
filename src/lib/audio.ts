@@ -31,29 +31,17 @@ function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
 }
 
 /**
- * Start capturing audio from the microphone using the provided (already
- * resumed) AudioContext. Emits 16 kHz PCM Int16 chunks via onAudioChunk.
- * Throws "MIC_UNSUPPORTED" if the browser can't access the mic (e.g. an
- * in-app/webview browser or an insecure context).
+ * Wire an ALREADY-OBTAINED mic MediaStream into the (already resumed)
+ * AudioContext and emit 16 kHz PCM Int16 chunks via onAudioChunk. The caller
+ * acquires the stream via getUserMedia up-front (in the user's tap) so the
+ * permission prompt shows immediately and denials are handled before we connect.
+ * `stop()` tears down the graph and stops the stream's tracks.
  */
 export async function startMicCapture(
   onAudioChunk: (pcm: Uint8Array) => void,
-  audioCtx: AudioContext
+  audioCtx: AudioContext,
+  stream: MediaStream
 ): Promise<{ stop: () => void }> {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error("MIC_UNSUPPORTED");
-  }
-
-  // Echo cancellation etc. stop the mic from picking up the agent's own voice.
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      channelCount: 1,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
-  });
-
   if (audioCtx.state === "suspended") {
     try {
       await audioCtx.resume();

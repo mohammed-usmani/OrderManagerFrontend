@@ -144,6 +144,42 @@ function getClientId(): string {
   }
 }
 
+const MIC_CONSTRAINTS: MediaTrackConstraints = {
+  channelCount: 1,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+
+/** A clear, actionable message for a mic-permission failure. Distinguishes a
+ *  hard block (browser won't re-prompt → must change site settings) from a
+ *  first-time prompt the user can simply re-trigger by tapping again. */
+async function micPermissionMessage(err: unknown): Promise<string> {
+  const name = (err as { name?: string })?.name;
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "I can't find a microphone on this device.";
+  }
+  if (
+    name === "NotAllowedError" ||
+    name === "SecurityError" ||
+    name === "PermissionDeniedError"
+  ) {
+    let blocked = false;
+    try {
+      const status = await navigator.permissions.query({
+        name: "microphone" as PermissionName,
+      });
+      blocked = status.state === "denied";
+    } catch {
+      /* Permissions API unavailable — fall back to the prompt message */
+    }
+    return blocked
+      ? "Microphone is blocked for this site. Tap the lock / site-settings icon in the address bar, allow Microphone, then reload and try again."
+      : "I need microphone access to take your order — tap the mic and choose Allow when your browser asks.";
+  }
+  return "Couldn't reach the microphone. Open this link directly in Chrome or Safari (not inside another app), then try again.";
+}
+
 interface VoiceAgentContextValue {
   status: AgentStatus;
   transcript: TranscriptEntry[];
@@ -196,6 +232,13 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const endTimerRef = useRef<number | null>(null);
   const warnTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+
+  const stopMicStream = useCallback(() => {
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+  }, []);
+
   // Queue state: when all global slots are busy the server rejects with 4003
   // and we auto-retry until one frees up.
   const retryTimerRef = useRef<number | null>(null);
@@ -291,6 +334,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           // Stop mic, close WS, clear state.
           micRef.current?.stop();
           micRef.current = null;
+          stopMicStream();
           playerRef.current?.stop();
           playerRef.current = null;
           closeAudioContext();
@@ -304,7 +348,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       endTimerRef.current = window.setTimeout(tick, POLL_MS);
     };
     tick();
-  }, [closeAudioContext]);
+  }, [closeAudioContext, stopMicStream]);
 
   const handleUIEvent = useCallback(
     (event: string, data: unknown) => {
@@ -412,6 +456,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     }
     micRef.current?.stop();
     micRef.current = null;
+    stopMicStream();
     playerRef.current?.stop();
     playerRef.current = null;
     closeAudioContext();
@@ -419,9 +464,9 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     wsRef.current = null;
     setIsVoiceActive(false);
     setStatus("disconnected");
-  }, [clearWarning, closeAudioContext, cancelQueue]);
+  }, [clearWarning, closeAudioContext, cancelQueue, stopMicStream]);
 
-  const startMic = useCallback(async (audioCtx: AudioContext) => {
+  const startMic = useCallback(async (audioCtx: AudioContext, stream: MediaStream) => {
     const mic = await startMicCapture((pcmChunk) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return;
       // Half-duplex: while Arjun is speaking, DON'T send mic audio upstream.
@@ -431,7 +476,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       const botSpeaking = (playerRef.current?.timeRemaining() ?? 0) > 0.12;
       if (botSpeaking) return;
       wsRef.current.send(encodeAudioFrame(pcmChunk, 16000, 1));
-    }, audioCtx);
+    }, audioCtx, stream);
     micRef.current = mic;
     setIsVoiceActive(true);
     setStatus("listening");
@@ -462,6 +507,35 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
+    // Ask for the microphone NOW, in the tap — so the permission prompt appears
+    // immediately and a denial/block is handled BEFORE we use a connection slot
+    // (no silent failure; the user gets a clear, actionable message + can retry).
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCanvas({
+        kind: "session_end",
+        reason: "mic_error",
+        message:
+          "This browser can't access the microphone. Open the link directly in Chrome or Safari.",
+      });
+      closeAudioContext();
+      setStatus("disconnected");
+      return;
+    }
+    try {
+      micStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        audio: MIC_CONSTRAINTS,
+      });
+    } catch (err) {
+      setCanvas({
+        kind: "session_end",
+        reason: "mic_error",
+        message: await micPermissionMessage(err),
+      });
+      closeAudioContext();
+      setStatus("disconnected");
+      return;
+    }
+
     // The voice line is public — fetch an anonymous ws-ticket (token is only
     // present for logged-in staff). The backend requires a ticket but no auth.
     let wsUrl = WS_URL;
@@ -469,6 +543,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       const { ticket } = await api.getWsTicket(token ?? undefined, getUserTimezone());
       wsUrl = `${WS_URL}?ticket=${ticket}&cid=${encodeURIComponent(getClientId())}`;
     } catch {
+      stopMicStream();
       closeAudioContext();
       setStatus("disconnected");
       return;
@@ -480,21 +555,18 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
 
     ws.onopen = async () => {
       const ctx = audioCtxRef.current;
-      if (!ctx) return;
+      const stream = micStreamRef.current;
+      if (!ctx || !stream) return;
       try {
         playerRef.current = createAudioPlayer(ctx, 24000);
-        await startMic(ctx);
+        await startMic(ctx, stream);
         cancelQueue(); // got a slot — clear any queue state
       } catch (err) {
-        // Mic denied, no mic, or an in-app/webview browser that blocks getUserMedia.
-        const name = (err as { name?: string })?.name;
-        const message =
-          name === "NotAllowedError" || name === "SecurityError"
-            ? "Microphone access is needed to talk to Arjun. Tap the mic and choose Allow."
-            : name === "NotFoundError"
-              ? "No microphone found on this device."
-              : "Couldn't access the mic. Open the link in Chrome or Safari (not inside another app).";
-        setCanvas({ kind: "session_end", reason: "mic_error", message });
+        setCanvas({
+          kind: "session_end",
+          reason: "mic_error",
+          message: await micPermissionMessage(err),
+        });
         disconnectVoice();
       }
     };
@@ -505,6 +577,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       setIsVoiceActive(false);
       micRef.current?.stop();
       micRef.current = null;
+      stopMicStream();
       playerRef.current?.stop();
       playerRef.current = null;
       closeAudioContext();
@@ -545,7 +618,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       }
     };
     ws.onerror = () => ws.close();
-  }, [startMic, handleMessage, token, disconnectVoice, clearWarning, closeAudioContext, cancelQueue]);
+  }, [startMic, handleMessage, token, disconnectVoice, clearWarning, closeAudioContext, cancelQueue, stopMicStream]);
 
   // Keep a stable ref so queue retries can re-invoke the latest connect().
   connectRef.current = connect;
@@ -571,6 +644,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       }
       wsRef.current?.close();
       micRef.current?.stop();
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
       playerRef.current?.stop();
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(() => {});
