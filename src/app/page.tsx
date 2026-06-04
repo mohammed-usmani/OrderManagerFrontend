@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { api, type MenuItemAPI } from "@/lib/api";
 
 // Public-facing delivery zone (mirrors the seeded service areas).
 const DELIVERY_AREAS = [
@@ -10,14 +11,58 @@ const DELIVERY_AREAS = [
   "Santacruz West", "Bandra East", "BKC",
 ];
 
-// A curated taste of the menu (Arjun knows the full list). No hard prices here
-// so the landing never drifts from the live menu.
-const DISHES = [
-  { name: "Butter Chicken", blurb: "Silky tomato-butter gravy — our all-time #1.", accent: "from-orange-700/55 to-red-900/40", tag: "Mains", heat: 1 },
-  { name: "Dal Makhani", blurb: "Black lentils slow-cooked overnight till velvety.", accent: "from-amber-800/50 to-stone-800/40", tag: "Mains", heat: 0 },
-  { name: "Chicken Dum Biryani", blurb: "Sealed and steamed over saffron rice.", accent: "from-yellow-700/50 to-amber-900/40", tag: "Rice", heat: 2 },
-  { name: "Paneer Tikka", blurb: "Charred in the tandoor — smoky and soft.", accent: "from-rose-700/50 to-amber-800/35", tag: "Starters", heat: 2 },
+// Normalized card shape used by the "A taste of tonight" strip. `image` is the
+// live Cloudinary photo when available; `accent` is the warm gradient fallback.
+type Dish = { name: string; blurb: string; tag: string; heat: number; image: string | null; accent: string };
+
+const ACCENTS = [
+  "from-orange-700/55 to-red-900/40",
+  "from-amber-800/50 to-stone-800/40",
+  "from-yellow-700/50 to-amber-900/40",
+  "from-rose-700/50 to-amber-800/35",
 ];
+
+// Curated fallback — shown only if the live menu can't be reached or has no
+// photographed dishes yet. No hard prices so it never drifts from the menu.
+const FALLBACK_DISHES: Dish[] = [
+  { name: "Butter Chicken", blurb: "Silky tomato-butter gravy — our all-time #1.", tag: "Mains", heat: 1, image: null, accent: ACCENTS[0] },
+  { name: "Dal Makhani", blurb: "Black lentils slow-cooked overnight till velvety.", tag: "Mains", heat: 0, image: null, accent: ACCENTS[1] },
+  { name: "Chicken Dum Biryani", blurb: "Sealed and steamed over saffron rice.", tag: "Rice", heat: 2, image: null, accent: ACCENTS[2] },
+  { name: "Paneer Tikka", blurb: "Charred in the tandoor — smoky and soft.", tag: "Starters", heat: 2, image: null, accent: ACCENTS[3] },
+];
+
+function heatFromSpice(level: string | null | undefined): number {
+  switch ((level || "").toLowerCase()) {
+    case "hot":
+    case "very hot":
+    case "fiery":
+      return 3;
+    case "medium":
+    case "spicy":
+      return 2;
+    case "mild":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+// Pick the most enticing photographed dishes from the live menu.
+function toFeatured(menu: MenuItemAPI[]): Dish[] {
+  const withPhotos = menu
+    .filter((m) => m.available && m.image_url)
+    .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+    .slice(0, 4);
+  if (withPhotos.length === 0) return FALLBACK_DISHES;
+  return withPhotos.map((m, i) => ({
+    name: m.name,
+    blurb: (m.taste_profile || m.description || "").trim() || "A house favourite.",
+    tag: m.category,
+    heat: heatFromSpice(m.spice_level),
+    image: m.image_url,
+    accent: ACCENTS[i % ACCENTS.length],
+  }));
+}
 
 const STEPS = [
   { icon: "mic", kicker: "01", title: "Tap & talk", description: "No app, no forms. Press the mic and tell Arjun what you’re craving — in plain words." },
@@ -43,11 +88,23 @@ export default function LandingPage() {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
   const [openState, setOpenState] = useState<OpenState | null>(null);
+  const [dishes, setDishes] = useState<Dish[]>(FALLBACK_DISHES);
 
   // Only staff get redirected to the back-office; the public stays here.
   useEffect(() => {
     if (isAuthenticated && user?.is_admin) router.replace("/admin");
   }, [isAuthenticated, user, router]);
+
+  // Pull real, photographed dishes from the live menu (Cloudinary images the
+  // admin uploaded). Silently keep the curated fallback if it fails.
+  useEffect(() => {
+    let alive = true;
+    api
+      .getMenu()
+      .then((menu) => { if (alive) setDishes(toFeatured(menu)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   // Live "open / closed" status in IST, refreshed each minute.
   useEffect(() => {
@@ -159,27 +216,37 @@ export default function LandingPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          {DISHES.map((d, i) => (
+          {dishes.map((d, i) => (
             <article
-              key={d.name}
+              key={`${d.name}-${i}`}
               className="reveal group rounded-2xl ember-card overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_18px_50px_-20px_rgba(255,106,26,0.45)]"
               style={{ animationDelay: `${i * 70}ms` }}
             >
-              <div className={`relative h-28 md:h-32 bg-gradient-to-br ${d.accent}`}>
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,200,120,0.18),transparent_60%)]" />
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#140f09] to-transparent" />
-                <span className="absolute top-2.5 left-3 text-[9px] font-semibold uppercase tracking-[0.2em] text-on-surface/90 drop-shadow">{d.tag}</span>
+              <div className={`relative h-36 md:h-44 bg-gradient-to-br ${d.accent}`}>
+                {d.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={d.image}
+                    alt={d.name}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,200,120,0.18),transparent_60%)]" />
+                )}
+                <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#140f09] via-[#140f09]/40 to-transparent" />
+                <span className="absolute top-2.5 left-3 px-2 py-0.5 rounded-full bg-black/35 backdrop-blur-sm text-[9px] font-semibold uppercase tracking-[0.2em] text-on-surface/95">{d.tag}</span>
                 {d.heat > 0 && (
                   <span className="absolute top-2.5 right-3 inline-flex gap-0.5">
                     {Array.from({ length: d.heat }).map((_, j) => (
-                      <span key={j} className="material-symbols-outlined text-[12px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
+                      <span key={j} className="material-symbols-outlined text-[13px] text-primary drop-shadow" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
                     ))}
                   </span>
                 )}
               </div>
               <div className="px-4 py-3.5">
                 <h3 className="font-headline font-semibold text-on-surface text-base leading-tight mb-1">{d.name}</h3>
-                <p className="text-on-surface-variant text-xs leading-relaxed">{d.blurb}</p>
+                <p className="text-on-surface-variant text-xs leading-relaxed line-clamp-2">{d.blurb}</p>
               </div>
             </article>
           ))}
