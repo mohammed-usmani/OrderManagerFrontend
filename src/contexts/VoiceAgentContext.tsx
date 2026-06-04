@@ -151,6 +151,13 @@ const MIC_CONSTRAINTS: MediaTrackConstraints = {
   autoGainControl: true,
 };
 
+// Adaptive half-duplex: barge-in (full-duplex) is ON by default. If the bot's
+// own audio keeps getting transcribed as "user" speech while it's speaking
+// (echo/feedback), we flip to half-duplex — mute the mic while the bot talks —
+// for the rest of the call. ECHO_THRESHOLD overlaps within ECHO_WINDOW_MS trips it.
+const ECHO_WINDOW_MS = 8000;
+const ECHO_THRESHOLD = 4;
+
 /** A clear, actionable message for a mic-permission failure. Distinguishes a
  *  hard block (browser won't re-prompt → must change site settings) from a
  *  first-time prompt the user can simply re-trigger by tapping again. */
@@ -187,6 +194,9 @@ interface VoiceAgentContextValue {
   isVoiceActive: boolean;
   /** True while waiting in the queue for a free voice slot (all busy). */
   queued: boolean;
+  /** True once echo was detected and we switched to half-duplex (barge-in off
+   *  — the caller must wait for Arjun to finish before speaking). */
+  echoSuppressed: boolean;
   /** Seconds left before the call's hard time cap, once the backend warns
    *  (~1 min out). null when not in the warning window. */
   warningSecondsLeft: number | null;
@@ -225,6 +235,10 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [warningSecondsLeft, setWarningSecondsLeft] = useState<number | null>(null);
   const [queued, setQueued] = useState(false);
+  const [echoSuppressed, setEchoSuppressed] = useState(false);
+  // Half-duplex engages only after echo is detected (see ECHO_* constants).
+  const halfDuplexRef = useRef(false);
+  const echoTimesRef = useRef<number[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<{ stop: () => void } | null>(null);
@@ -435,7 +449,27 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
         if (frame.text) addTranscript("assistant", frame.text);
         setStatus((s) => (s !== "disconnected" ? "listening" : s));
       } else if (frame.type === "transcription") {
-        if (frame.text) addTranscript("user", frame.text);
+        if (frame.text) {
+          addTranscript("user", frame.text);
+          // Echo guard: a "user" transcription arriving WHILE the bot is still
+          // speaking usually means the mic is hearing the bot. Enough overlaps
+          // in a short window → switch to half-duplex for the rest of the call.
+          if (
+            !halfDuplexRef.current &&
+            (playerRef.current?.timeRemaining() ?? 0) > 0.3
+          ) {
+            const now = Date.now();
+            const recent = echoTimesRef.current.filter(
+              (t) => now - t < ECHO_WINDOW_MS
+            );
+            recent.push(now);
+            echoTimesRef.current = recent;
+            if (recent.length >= ECHO_THRESHOLD) {
+              halfDuplexRef.current = true;
+              setEchoSuppressed(true);
+            }
+          }
+        }
       } else if (frame.type === "message") {
         if (isUIEvent(frame.data)) {
           handleUIEvent(frame.data.event, frame.data.data);
@@ -469,12 +503,13 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const startMic = useCallback(async (audioCtx: AudioContext, stream: MediaStream) => {
     const mic = await startMicCapture((pcmChunk) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-      // Half-duplex: while Arjun is speaking, DON'T send mic audio upstream.
-      // Otherwise the speakers feed his own voice back into the mic, Gemini
-      // hears itself, the turn never ends, and he talks over himself in a loop.
-      // (Browser echo-cancellation isn't reliable across devices/speakers.)
-      const botSpeaking = (playerRef.current?.timeRemaining() ?? 0) > 0.12;
-      if (botSpeaking) return;
+      // Full-duplex by default so barge-in works. Only once we've detected an
+      // echo loop (halfDuplexRef) do we stop sending mic audio while the bot is
+      // speaking — so it can't keep hearing itself.
+      if (halfDuplexRef.current) {
+        const botSpeaking = (playerRef.current?.timeRemaining() ?? 0) > 0.12;
+        if (botSpeaking) return;
+      }
       wsRef.current.send(encodeAudioFrame(pcmChunk, 16000, 1));
     }, audioCtx, stream);
     micRef.current = mic;
@@ -485,6 +520,10 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   // Opens a connection attempt (used for the initial tap and for queue retries).
   const connect = useCallback(async () => {
     setStatus("connecting");
+    // Each call starts in full-duplex (barge-in on); echo detection may flip it.
+    halfDuplexRef.current = false;
+    echoTimesRef.current = [];
+    setEchoSuppressed(false);
 
     // Create + resume the AudioContext NOW, synchronously inside the tap
     // gesture — iOS/Safari only unlock audio this way. Reused for capture and
@@ -659,6 +698,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     canvas,
     isVoiceActive,
     queued,
+    echoSuppressed,
     warningSecondsLeft,
     disconnectVoice,
     toggleVoice,

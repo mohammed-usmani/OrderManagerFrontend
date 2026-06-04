@@ -37,7 +37,7 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user, router]);
 
-  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued } =
+  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued, echoSuppressed } =
     useVoiceAgent();
 
   const isConnecting = status === "connecting";
@@ -102,6 +102,12 @@ export default function ChatPage() {
           <div className="absolute inset-x-0 -top-10 h-10 bg-gradient-to-t from-[#14100c] to-transparent pointer-events-none" />
 
           <div className="flex flex-col items-center gap-2 py-4 md:py-6 bg-[#14100c]/85 backdrop-blur-xl border-t border-white/5">
+            {echoSuppressed && isVoiceActive && (
+              <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-tertiary/30 bg-tertiary/10 px-3 py-1 text-[11px] font-medium text-tertiary reveal-sm">
+                <span className="material-symbols-outlined text-[15px]">noise_control_off</span>
+                Noisy line — let Arjun finish, then talk
+              </div>
+            )}
             {warningSecondsLeft !== null && (
               <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary reveal-sm">
                 <span
