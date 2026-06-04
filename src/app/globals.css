@@ -200,6 +200,18 @@ body::after {
   15%  { opacity: 0.8; }
   100% { transform: translateY(-90px) scale(0.3); opacity: 0; }
 }
+/* Voice equalizer bars (the hero "Arjun is speaking" orb). */
+@keyframes eq {
+  0%, 100% { transform: scaleY(0.28); }
+  50%      { transform: scaleY(1); }
+}
+.eq-bar {
+  transform-origin: center bottom;
+  animation: eq 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .eq-bar { animation: none; transform: scaleY(0.6); }
+}
 @keyframes shimmer {
   100% { background-position: 200% 0; }
 }
