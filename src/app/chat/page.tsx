@@ -25,6 +25,13 @@ const SUGGESTIONS = [
   { icon: "confirmation_number", text: "My code is 4-2-8-1" },
 ];
 
+const DINE_IN_SUGGESTIONS = [
+  { icon: "restaurant_menu", text: "What's good tonight?" },
+  { icon: "local_fire_department", text: "Something spicy" },
+  { icon: "spa", text: "Vegetarian mains" },
+  { icon: "receipt_long", text: "Bring the bill, please" },
+];
+
 export default function ChatPage() {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
@@ -37,8 +44,9 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user, router]);
 
-  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued, echoSuppressed } =
+  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued, echoSuppressed, tableContext } =
     useVoiceAgent();
+  const dineIn = tableContext !== null;
 
   const isConnecting = status === "connecting";
   const isIdle = canvas.kind === "idle";
@@ -53,6 +61,7 @@ export default function ChatPage() {
     canvas.kind === "order_confirmed" ||
     canvas.kind === "customer_card" ||
     canvas.kind === "delivery_check" ||
+    canvas.kind === "bill_requested" ||
     canvas.kind === "session_end";
 
   const micIcon = queued
@@ -69,7 +78,18 @@ export default function ChatPage() {
           stays a slim context strip, not a second wordmark. */}
       <div className="hidden md:flex items-center justify-between px-8 py-4 border-b border-white/5">
         <p className="text-on-surface-variant text-sm">
-          Parcel delivery across Bandra — tell Arjun what you’re craving.
+          {dineIn ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
+                table_restaurant
+              </span>
+              Table {tableContext!.label}
+              {tableContext!.zoneName ? ` · ${tableContext!.zoneName}` : ""}
+              {tableContext!.isAc ? " · AC" : ""} — tell Arjun what you’d like.
+            </span>
+          ) : (
+            "Parcel delivery across Bandra — tell Arjun what you’re craving."
+          )}
         </p>
         <div className={`flex items-center gap-2 ${live ? "text-primary" : "text-on-surface-variant"}`}>
           <span
@@ -163,8 +183,10 @@ export default function ChatPage() {
 }
 
 function IdleHero() {
-  const { toggleVoice, status } = useVoiceAgent();
+  const { toggleVoice, status, tableContext } = useVoiceAgent();
   const isConnecting = status === "connecting";
+  const dineIn = tableContext !== null;
+  const suggestions = dineIn ? DINE_IN_SUGGESTIONS : SUGGESTIONS;
 
   return (
     <section className="flex flex-col items-center text-center py-12 md:py-20 max-w-xl mx-auto reveal">
@@ -175,28 +197,40 @@ function IdleHero() {
             className="material-symbols-outlined text-primary text-5xl"
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
-            local_fire_department
+            {dineIn ? "table_restaurant" : "local_fire_department"}
           </span>
         </div>
       </div>
 
       <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-tertiary mb-3">
-        Saffron &amp; Smoke · Bandra West
+        {dineIn
+          ? `Table ${tableContext!.label}${tableContext!.zoneName ? ` · ${tableContext!.zoneName}` : ""}${tableContext!.isAc ? " · AC" : ""}`
+          : "Saffron & Smoke · Bandra West"}
       </p>
       <h2 className="font-headline font-semibold text-on-surface text-3xl md:text-4xl mb-3 leading-[1.1]">
-        Order dinner by just{" "}
-        <span className="italic text-primary">talking.</span>
+        {dineIn ? (
+          <>
+            Ready to order? Just{" "}
+            <span className="italic text-primary">talk.</span>
+          </>
+        ) : (
+          <>
+            Order dinner by just{" "}
+            <span className="italic text-primary">talking.</span>
+          </>
+        )}
       </h2>
       <p className="text-on-surface-variant text-sm max-w-sm leading-relaxed mb-9">
-        Tap the mic and tell Arjun what you’re craving. New here? He’ll set you up
-        with a 4-digit code so next time he remembers you instantly.
+        {dineIn
+          ? "Tap the mic and tell Arjun what you’d like — he already knows your table. Order as much as you like; pay at the end."
+          : "Tap the mic and tell Arjun what you’re craving. New here? He’ll set you up with a 4-digit code so next time he remembers you instantly."}
       </p>
 
       <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-on-surface-variant mb-3">
         Try saying
       </p>
       <div className="grid grid-cols-2 gap-2.5 w-full max-w-md">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button
             key={s.text}
             onClick={toggleVoice}

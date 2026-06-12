@@ -7,6 +7,9 @@ export async function apiFetch<T>(
   const { token, ...rest } = options ?? {};
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    // Bypass ngrok's HTML interstitial so tunneled API calls return JSON, not
+    // the "You are about to visit…" page. Harmless on non-ngrok backends.
+    "ngrok-skip-browser-warning": "true",
     ...(rest.headers as Record<string, string>),
   };
   if (token) {
@@ -101,11 +104,14 @@ export const api = {
     }),
   // Public — the voice line is open to anyone. Token is optional (only staff
   // are ever logged in); the backend issues an anonymous ticket either way.
-  getWsTicket: (token?: string, timezone?: string) =>
+  getWsTicket: (token?: string, timezone?: string, tableToken?: string) =>
     apiFetch<{ ticket: string }>("/auth/ws-ticket", {
       method: "POST",
       token,
-      body: JSON.stringify({ timezone: timezone ?? null }),
+      body: JSON.stringify({
+        timezone: timezone ?? null,
+        table_token: tableToken ?? null,
+      }),
     }),
 
   // Admin
@@ -113,11 +119,7 @@ export const api = {
     apiFetch<AdminOrderAPI[]>(`/admin/orders?status=${encodeURIComponent(status)}`, {
       token,
     }),
-  adminUpdateOrderStatus: (
-    token: string,
-    orderId: string,
-    status: "awaiting_payment" | "paid" | "cancelled",
-  ) =>
+  adminUpdateOrderStatus: (token: string, orderId: string, status: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/status`, {
       method: "PATCH",
       token,
@@ -131,6 +133,15 @@ export const api = {
       `/admin/analytics/summary?range=${range}`,
       { token },
     ),
+  adminAnalyticsOverview: (token: string, range = "today") =>
+    apiFetch<AnalyticsOverviewAPI>(`/admin/analytics/overview?range=${range}`, { token }),
+  adminAnalyticsTimeseries: (token: string, range = "30d", granularity = "day") =>
+    apiFetch<TimeseriesBucketAPI[]>(
+      `/admin/analytics/timeseries?range=${range}&granularity=${granularity}`,
+      { token },
+    ),
+  adminAnalyticsPeakHours: (token: string, range = "30d") =>
+    apiFetch<PeakHourAPI[]>(`/admin/analytics/peak-hours?range=${range}`, { token }),
   adminListMenu: (token: string) =>
     apiFetch<MenuItemAPI[]>("/admin/menu", { token }),
   // Menu CRUD (admin)
@@ -193,6 +204,43 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // Zones (admin)
+  adminListZones: (token: string) => apiFetch<ZoneAPI[]>("/zones", { token }),
+  adminCreateZone: (token: string, body: ZoneWriteAPI) =>
+    apiFetch<ZoneAPI>("/zones", { method: "POST", token, body: JSON.stringify(body) }),
+  adminUpdateZone: (token: string, id: string, body: ZoneWriteAPI) =>
+    apiFetch<ZoneAPI>(`/zones/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
+  adminDeleteZone: (token: string, id: string) =>
+    apiFetch<void>(`/zones/${id}`, { method: "DELETE", token }),
+
+  // Tables (admin) + live floor map
+  adminListTables: (token: string, zoneId?: string) =>
+    apiFetch<TableAPI[]>(`/tables${zoneId ? `?zone_id=${encodeURIComponent(zoneId)}` : ""}`, { token }),
+  adminCreateTable: (token: string, body: TableWriteAPI) =>
+    apiFetch<TableAPI>("/tables", { method: "POST", token, body: JSON.stringify(body) }),
+  adminUpdateTable: (token: string, id: string, body: TableWriteAPI) =>
+    apiFetch<TableAPI>(`/tables/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
+  adminDeleteTable: (token: string, id: string) =>
+    apiFetch<void>(`/tables/${id}`, { method: "DELETE", token }),
+  adminFloorMap: (token: string) => apiFetch<FloorZoneAPI[]>("/tables/floor", { token }),
+  adminGetTableSession: (token: string, id: string) =>
+    apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}`, { token }),
+  adminSettleTableSession: (token: string, id: string) =>
+    apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}/settle`, { method: "POST", token }),
+  // Public — resolve a scanned table QR token.
+  resolveTable: (qrToken: string) =>
+    apiFetch<ResolveTableAPI>(`/tables/resolve/${encodeURIComponent(qrToken)}`),
+
+  // Pricing / charge policy (admin)
+  adminGetChargePolicy: (token: string) =>
+    apiFetch<{ charges: ChargeRuleAPI[] }>("/settings/charge-policy", { token }),
+  adminUpdateChargePolicy: (token: string, charges: ChargeRuleAPI[]) =>
+    apiFetch<{ charges: ChargeRuleAPI[] }>("/settings/charge-policy", {
+      method: "PUT",
+      token,
+      body: JSON.stringify({ charges }),
+    }),
+
   // Service areas (admin)
   adminListServiceAreas: (token: string) =>
     apiFetch<ServiceAreaAPI[]>("/service-areas", { token }),
@@ -241,6 +289,50 @@ export interface AnalyticsSummaryAPI {
   top_items: AnalyticsTopItem[];
 }
 
+// Analytics (richer dashboard)
+
+export interface SplitBucketAPI {
+  orders: number;
+  revenue: number;
+}
+
+export interface ZoneStatAPI {
+  zone: string;
+  orders: number;
+  revenue: number;
+}
+
+export interface AnalyticsOverviewAPI {
+  range: string;
+  range_start: string;
+  total_orders: number;
+  billable_orders: number;
+  orders_by_status: Record<string, number>;
+  revenue_subtotal: number;
+  revenue_total: number;
+  avg_ticket: number;
+  split: { dine_in: SplitBucketAPI; parcel: SplitBucketAPI };
+  by_zone: ZoneStatAPI[];
+  top_items: AnalyticsTopItem[];
+  dine_in_sessions: number;
+  active_tables: number;
+  table_turnover: number;
+}
+
+export interface TimeseriesBucketAPI {
+  bucket: string;
+  orders: number;
+  revenue: number;
+  dine_in: number;
+  parcel: number;
+}
+
+export interface PeakHourAPI {
+  hour: number;
+  orders: number;
+  revenue: number;
+}
+
 export interface MenuItemCreateAPI {
   id: string;
   name: string;
@@ -282,6 +374,9 @@ export interface AdminOrderAPI {
   order_type: string;
   created_at: string;
   confirmed_at: string | null;
+  served_at: string | null;
+  ready_at: string | null;
+  delivered_at: string | null;
   paid_at: string | null;
   customer_email: string;
   customer_name: string;
@@ -290,11 +385,128 @@ export interface AdminOrderAPI {
   delivery_address: string | null;
   delivery_area: string | null;
   delivery_pincode: string | null;
+  table_id: string | null;
+  table_label: string | null;
+  table_session_id: string | null;
+  zone_name: string | null;
+  is_ac: boolean | null;
+  next_statuses: string[];
   item_count: number;
   subtotal: number;
   charges: BillCharge[];
   total: number;
   items: AdminOrderItemAPI[];
+}
+
+// Zones, tables, floor map (dine-in)
+
+export interface ZoneAPI {
+  id: string;
+  name: string;
+  is_ac: boolean;
+  display_order: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface ZoneWriteAPI {
+  name?: string;
+  is_ac?: boolean;
+  display_order?: number;
+  active?: boolean;
+}
+
+export interface TableAPI {
+  id: string;
+  zone_id: string;
+  label: string;
+  seats: number;
+  pos_x: number | null;
+  pos_y: number | null;
+  qr_token: string;
+  status: string;
+  active: boolean;
+  created_at: string;
+}
+
+export interface TableWriteAPI {
+  zone_id?: string;
+  label?: string;
+  seats?: number;
+  pos_x?: number | null;
+  pos_y?: number | null;
+  status?: string;
+  active?: boolean;
+}
+
+export interface FloorSessionAPI {
+  id: string;
+  status: string;
+  opened_at: string | null;
+  party_size: number | null;
+  order_count: number;
+  running_total: number;
+}
+
+export interface FloorTableAPI {
+  id: string;
+  label: string;
+  seats: number;
+  pos_x: number | null;
+  pos_y: number | null;
+  qr_token: string;
+  status: string;
+  active: boolean;
+  session: FloorSessionAPI | null;
+}
+
+export interface FloorZoneAPI {
+  id: string;
+  name: string;
+  is_ac: boolean;
+  display_order: number;
+  active: boolean;
+  tables: FloorTableAPI[];
+}
+
+export interface TableSessionOrderAPI {
+  id: string;
+  status: string;
+  items: { name: string; quantity: number; line_total: number }[];
+  subtotal: number;
+  charges: BillCharge[];
+  total: number;
+}
+
+export interface TableSessionDetailAPI {
+  id: string;
+  status: string;
+  opened_at: string | null;
+  closed_at: string | null;
+  party_size: number | null;
+  table_label: string | null;
+  zone_name: string | null;
+  is_ac: boolean;
+  orders: TableSessionOrderAPI[];
+  grand_subtotal: number;
+  grand_total: number;
+}
+
+export interface ResolveTableAPI {
+  table_id: string;
+  label: string;
+  seats: number;
+  zone_id: string | null;
+  zone_name: string | null;
+  is_ac: boolean;
+}
+
+export interface ChargeRuleAPI {
+  key: string;
+  label: string;
+  rate: number;
+  applies_to: "all" | "dine_in" | "parcel";
+  ac_only: boolean;
 }
 
 // Customers (parcel callers)

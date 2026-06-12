@@ -120,7 +120,16 @@ export type CanvasState =
       serviceable: boolean;
       matched: string | null;
     }
+  | { kind: "bill_requested"; tableLabel?: string }
   | { kind: "session_end"; reason: string; message?: string };
+
+/** Dine-in context when the call was opened from a table's QR (/t/<token>). */
+export interface TableContext {
+  token: string;
+  label: string;
+  zoneName: string | null;
+  isAc: boolean;
+}
 
 // --- Context -----------------------------------------------------------
 
@@ -208,6 +217,9 @@ interface VoiceAgentContextValue {
    * state the voice agent would emit after add_to_order.
    */
   setCartView: (order: OrderCard) => void;
+  /** Dine-in table binding (set by the /t/<token> QR landing); null = parcel. */
+  tableContext: TableContext | null;
+  setTableContext: (ctx: TableContext | null) => void;
 }
 
 const VoiceAgentContext = createContext<VoiceAgentContextValue | null>(null);
@@ -232,6 +244,28 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   const [status, setStatus] = useState<AgentStatus>("disconnected");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [canvas, setCanvas] = useState<CanvasState>({ kind: "idle" });
+  const [tableContext, setTableContextState] = useState<TableContext | null>(null);
+
+  // Rehydrate the dine-in table binding (set by /t/<token>) so a reload of
+  // /chat keeps the call bound to the same table.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("tableContext");
+      if (raw) setTableContextState(JSON.parse(raw));
+    } catch {
+      /* no sessionStorage (private mode) — parcel mode */
+    }
+  }, []);
+
+  const setTableContext = useCallback((ctx: TableContext | null) => {
+    setTableContextState(ctx);
+    try {
+      if (ctx) sessionStorage.setItem("tableContext", JSON.stringify(ctx));
+      else sessionStorage.removeItem("tableContext");
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [warningSecondsLeft, setWarningSecondsLeft] = useState<number | null>(null);
   const [queued, setQueued] = useState(false);
@@ -412,6 +446,11 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           });
           break;
         }
+        case "bill_requested": {
+          const d = (data as { table_label?: string }) ?? {};
+          setCanvas({ kind: "bill_requested", tableLabel: d.table_label });
+          break;
+        }
         case "time_warning": {
           const secs = (data as { seconds_left?: number })?.seconds_left ?? 60;
           startWarningCountdown(secs);
@@ -578,8 +617,21 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     // The voice line is public — fetch an anonymous ws-ticket (token is only
     // present for logged-in staff). The backend requires a ticket but no auth.
     let wsUrl = WS_URL;
+    // Dine-in calls carry the scanned table's token (sessionStorage is the
+    // source of truth so a stale closure can't bind the wrong table).
+    let tableToken: string | undefined;
     try {
-      const { ticket } = await api.getWsTicket(token ?? undefined, getUserTimezone());
+      const raw = sessionStorage.getItem("tableContext");
+      if (raw) tableToken = (JSON.parse(raw) as TableContext).token;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const { ticket } = await api.getWsTicket(
+        token ?? undefined,
+        getUserTimezone(),
+        tableToken,
+      );
       wsUrl = `${WS_URL}?ticket=${ticket}&cid=${encodeURIComponent(getClientId())}`;
     } catch {
       stopMicStream();
@@ -704,6 +756,8 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     toggleVoice,
     clearCanvas,
     setCartView,
+    tableContext,
+    setTableContext,
   };
 
   return (

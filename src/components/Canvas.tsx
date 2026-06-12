@@ -355,6 +355,32 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
     );
   }
 
+  if (canvas.kind === "bill_requested") {
+    return (
+      <section className="flex flex-col items-center justify-center py-24 text-center gap-4 reveal">
+        <div className="w-16 h-16 rounded-full ember-card flex items-center justify-center">
+          <span
+            className="material-symbols-outlined text-tertiary text-3xl"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+          >
+            receipt_long
+          </span>
+        </div>
+        <div>
+          <h3 className="font-headline font-semibold text-on-surface text-2xl">
+            Bill on its way
+          </h3>
+          <p className="text-on-surface-variant text-sm max-w-md mt-2 leading-relaxed">
+            {canvas.tableLabel
+              ? `We’ll bring the bill over to Table ${canvas.tableLabel} to settle up.`
+              : "We’ll bring the bill over to settle up."}{" "}
+            Thanks for dining with us!
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   if (canvas.kind === "order_confirmed") {
     return (
       <section className="space-y-6 max-w-2xl mx-auto w-full">

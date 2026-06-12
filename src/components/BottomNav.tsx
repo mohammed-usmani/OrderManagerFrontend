@@ -14,11 +14,13 @@ const PUBLIC_NAV: NavItem[] = [
   { href: "/chat", icon: "mic", label: "Order" },
 ];
 
+// Mobile is trimmed to the on-the-floor essentials; the fuller set
+// (Tables/QR, Pricing, Customers, Delivery areas) lives in the desktop sidebar.
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", icon: "dashboard", label: "Home" },
   { href: "/admin/orders", icon: "soup_kitchen", label: "Kitchen" },
+  { href: "/admin/floor", icon: "grid_view", label: "Floor" },
   { href: "/admin/menu", icon: "restaurant_menu", label: "Menu" },
-  { href: "/admin/customers", icon: "groups", label: "Customers" },
   { href: "/profile", icon: "person", label: "Profile" },
 ];
 

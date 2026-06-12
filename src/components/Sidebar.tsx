@@ -18,8 +18,12 @@ const PUBLIC_NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", icon: "dashboard", label: "Dashboard" },
+  { href: "/admin/analytics", icon: "monitoring", label: "Analytics" },
   { href: "/admin/orders", icon: "soup_kitchen", label: "Kitchen" },
+  { href: "/admin/floor", icon: "grid_view", label: "Floor" },
+  { href: "/admin/tables", icon: "table_restaurant", label: "Tables & QR" },
   { href: "/admin/menu", icon: "restaurant_menu", label: "Menu" },
+  { href: "/admin/pricing", icon: "payments", label: "Pricing" },
   { href: "/admin/customers", icon: "groups", label: "Customers" },
   { href: "/admin/service-areas", icon: "pin_drop", label: "Delivery areas" },
   { href: "/profile", icon: "person", label: "Profile" },

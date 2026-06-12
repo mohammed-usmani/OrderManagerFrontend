@@ -11,17 +11,39 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, StatusChip, Toolbar } from "@/components/admin/ui";
 
-type Filter = "active" | "all" | "confirmed" | "awaiting_payment" | "paid" | "cancelled";
+type Filter =
+  | "active"
+  | "all"
+  | "confirmed"
+  | "cooking"
+  | "served"
+  | "ready"
+  | "delivered"
+  | "paid"
+  | "cancelled";
 type SortKey = "created_at" | "total" | "customer_email";
 type SortDir = "asc" | "desc";
 
 const FILTER_LABEL: Record<Filter, string> = {
   active: "Active",
   all: "All",
-  confirmed: "Confirmed",
-  awaiting_payment: "Awaiting payment",
+  confirmed: "New",
+  cooking: "Cooking",
+  served: "Served",
+  ready: "Ready",
+  delivered: "Delivered",
   paid: "Paid",
   cancelled: "Cancelled",
+};
+
+// Button label per lifecycle target the order can move to next.
+const STATUS_VERB: Record<string, string> = {
+  cooking: "Start cooking",
+  served: "Served",
+  ready: "Ready",
+  delivered: "Delivered",
+  paid: "Mark paid",
+  cancelled: "Cancel",
 };
 
 const REFRESH_MS = 15000;
@@ -105,7 +127,7 @@ export default function AdminOrdersPage() {
     });
 
   const transition = useCallback(
-    async (id: string, status: "paid" | "cancelled") => {
+    async (id: string, status: string) => {
       if (!token) return;
       markBusy([id], true);
       try {
@@ -120,28 +142,28 @@ export default function AdminOrdersPage() {
     [token, load]
   );
 
-  const bulkTransition = useCallback(
-    async (status: "paid" | "cancelled") => {
-      if (!token || selected.size === 0) return;
-      const ids = Array.from(selected);
-      markBusy(ids, true);
-      try {
-        await Promise.all(ids.map((id) => api.adminUpdateOrderStatus(token, id, status)));
-        setSelected(new Set());
-        await load();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        markBusy(ids, false);
-      }
-    },
-    [token, selected, load]
-  );
+  const bulkCancel = useCallback(async () => {
+    if (!token || selected.size === 0) return;
+    // Only cancel rows that can legally be cancelled right now.
+    const ids = Array.from(selected).filter((id) =>
+      orders.find((o) => o.id === id)?.next_statuses.includes("cancelled")
+    );
+    if (ids.length === 0) return;
+    markBusy(ids, true);
+    try {
+      await Promise.all(ids.map((id) => api.adminUpdateOrderStatus(token, id, "cancelled")));
+      setSelected(new Set());
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      markBusy(ids, false);
+    }
+  }, [token, selected, orders, load]);
 
   // --- Selection helpers (ignore rows where we can't act) ---
 
-  const canAct = (o: AdminOrderAPI) =>
-    o.status === "confirmed" || o.status === "awaiting_payment";
+  const canAct = (o: AdminOrderAPI) => o.next_statuses.length > 0;
   const actionable = visible.filter(canAct);
   const allSelected =
     actionable.length > 0 && actionable.every((o) => selected.has(o.id));
@@ -217,19 +239,8 @@ export default function AdminOrdersPage() {
               <span className="text-xs text-ink-soft mr-1">
                 {selected.size} selected
               </span>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => bulkTransition("paid")}
-              >
-                Mark paid
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => bulkTransition("cancelled")}
-              >
-                Cancel
+              <Button size="sm" variant="danger" onClick={bulkCancel}>
+                Cancel selected
               </Button>
             </>
           )}
@@ -336,21 +347,38 @@ export default function AdminOrdersPage() {
                               #{order.id.slice(0, 8).toUpperCase()}
                             </td>
                             <td className="px-3 py-2">
-                              <div className="font-medium text-ink truncate max-w-[200px]">
-                                {order.customer_name || "—"}
-                              </div>
-                              <div className="text-xs text-ink-soft truncate max-w-[200px]">
-                                {order.customer_code ? (
-                                  <>
-                                    <span className="font-mono tracking-widest">
-                                      {order.customer_code}
+                              {order.order_type === "dine_in" ? (
+                                <>
+                                  <div className="font-medium text-ink truncate max-w-[200px] flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-[15px] text-ink-faint">
+                                      table_restaurant
                                     </span>
-                                    {order.contact_phone ? ` · ${order.contact_phone}` : ""}
-                                  </>
-                                ) : (
-                                  order.customer_email
-                                )}
-                              </div>
+                                    Table {order.table_label ?? "?"}
+                                  </div>
+                                  <div className="text-xs text-ink-soft truncate max-w-[200px]">
+                                    {order.zone_name ?? "Dine-in"}
+                                    {order.is_ac ? " · AC" : ""}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="font-medium text-ink truncate max-w-[200px]">
+                                    {order.customer_name || "—"}
+                                  </div>
+                                  <div className="text-xs text-ink-soft truncate max-w-[200px]">
+                                    {order.customer_code ? (
+                                      <>
+                                        <span className="font-mono tracking-widest">
+                                          {order.customer_code}
+                                        </span>
+                                        {order.contact_phone ? ` · ${order.contact_phone}` : ""}
+                                      </>
+                                    ) : (
+                                      order.customer_email
+                                    )}
+                                  </div>
+                                </>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-ink-soft">
                               {order.item_count}
@@ -366,23 +394,24 @@ export default function AdminOrdersPage() {
                             </td>
                             <td className="px-3 py-2 text-right">
                               {actable ? (
-                                <div className="inline-flex gap-1 justify-end">
-                                  <Button
-                                    size="sm"
-                                    variant="primary"
-                                    onClick={() => transition(order.id, "paid")}
-                                    disabled={busy}
-                                  >
-                                    Paid
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="danger"
-                                    onClick={() => transition(order.id, "cancelled")}
-                                    disabled={busy}
-                                  >
-                                    Cancel
-                                  </Button>
+                                <div className="inline-flex gap-1 justify-end flex-wrap">
+                                  {order.next_statuses.map((s) => (
+                                    <Button
+                                      key={s}
+                                      size="sm"
+                                      variant={
+                                        s === "cancelled"
+                                          ? "danger"
+                                          : s === "paid"
+                                            ? "primary"
+                                            : "secondary"
+                                      }
+                                      onClick={() => transition(order.id, s)}
+                                      disabled={busy}
+                                    >
+                                      {STATUS_VERB[s] ?? s}
+                                    </Button>
+                                  ))}
                                 </div>
                               ) : (
                                 <span className="text-xs text-ink-faint">—</span>
@@ -392,23 +421,39 @@ export default function AdminOrdersPage() {
                           {isExpanded && (
                             <tr className="border-b border-line bg-paper-sunken/40">
                               <td colSpan={9} className="px-6 py-3">
-                                {(order.delivery_address || order.delivery_area) && (
+                                {order.order_type === "dine_in" ? (
                                   <div className="mb-3 flex items-start gap-2 text-sm">
                                     <span className="material-symbols-outlined text-[16px] text-ink-faint mt-0.5">
-                                      local_shipping
+                                      table_restaurant
                                     </span>
                                     <div className="text-ink-soft">
                                       <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft mr-2">
-                                        Deliver to
+                                        Dine-in
                                       </span>
-                                      {order.delivery_address || order.delivery_area}
-                                      {order.delivery_area && order.delivery_address
-                                        ? `, ${order.delivery_area}`
-                                        : ""}
-                                      {order.delivery_pincode ? ` — ${order.delivery_pincode}` : ""}
-                                      {order.contact_phone ? ` · ☎ ${order.contact_phone}` : ""}
+                                      Table {order.table_label ?? "?"}
+                                      {order.zone_name ? ` · ${order.zone_name}` : ""}
+                                      {order.is_ac ? " · AC" : ""}
                                     </div>
                                   </div>
+                                ) : (
+                                  (order.delivery_address || order.delivery_area) && (
+                                    <div className="mb-3 flex items-start gap-2 text-sm">
+                                      <span className="material-symbols-outlined text-[16px] text-ink-faint mt-0.5">
+                                        local_shipping
+                                      </span>
+                                      <div className="text-ink-soft">
+                                        <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft mr-2">
+                                          Deliver to
+                                        </span>
+                                        {order.delivery_address || order.delivery_area}
+                                        {order.delivery_area && order.delivery_address
+                                          ? `, ${order.delivery_area}`
+                                          : ""}
+                                        {order.delivery_pincode ? ` — ${order.delivery_pincode}` : ""}
+                                        {order.contact_phone ? ` · ☎ ${order.contact_phone}` : ""}
+                                      </div>
+                                    </div>
+                                  )
                                 )}
                                 <ul className="space-y-1 text-sm">
                                   {order.items.map((it) => (

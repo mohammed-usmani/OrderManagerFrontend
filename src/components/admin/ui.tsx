@@ -87,6 +87,10 @@ export function Select({
 const STATUS_CHIP: Record<string, string> = {
   cart: "bg-paper-sunken text-ink-soft border-line",
   confirmed: "bg-tertiary/15 text-[#8a5a00] border-tertiary/30",
+  cooking: "bg-orange-100/70 text-orange-800 border-orange-300/60",
+  served: "bg-emerald-100/70 text-emerald-800 border-emerald-300/60",
+  ready: "bg-sky-100/70 text-sky-800 border-sky-300/60",
+  delivered: "bg-indigo-100/70 text-indigo-800 border-indigo-300/60",
   awaiting_payment: "bg-amber-100/70 text-amber-800 border-amber-300/60",
   paid: "bg-emerald-100/70 text-emerald-800 border-emerald-300/60",
   cancelled: "bg-rose-100/70 text-rose-800 border-rose-300/60",
