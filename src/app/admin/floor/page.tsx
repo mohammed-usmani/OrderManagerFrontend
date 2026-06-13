@@ -8,7 +8,10 @@ import {
   type FloorAPI,
   type FloorMapFloorAPI,
   type FloorWriteAPI,
+  type FloorZoneAPI,
   type TableSessionDetailAPI,
+  type TableWriteAPI,
+  type ZoneWriteAPI,
 } from "@/lib/api";
 import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
@@ -37,6 +40,10 @@ export default function AdminFloorPage() {
   const [saving, setSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [manageFloors, setManageFloors] = useState(false);
+  // Edit-mode CRUD modals
+  const [addTableZoneId, setAddTableZoneId] = useState<string | null>(null);
+  const [zoneModal, setZoneModal] = useState<"new" | FloorZoneAPI | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: "zone" | "table"; id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -163,6 +170,18 @@ export default function AdminFloorPage() {
           actions={
             editing ? (
               <>
+                <Button variant="ghost" icon="grid_view" onClick={() => setZoneModal("new")}>Add zone</Button>
+                <Button
+                  variant="ghost"
+                  icon="table_restaurant"
+                  onClick={() => {
+                    const firstZone = activeFloor?.zones[0];
+                    if (firstZone) setAddTableZoneId(firstZone.id);
+                  }}
+                  disabled={!activeFloor?.zones.length}
+                >
+                  Add table
+                </Button>
                 <Button variant="ghost" onClick={cancelEdit} disabled={saving}>Cancel</Button>
                 <Button variant="primary" icon="save" onClick={saveLayout} disabled={saving}>
                   {saving ? "Saving…" : "Save layout"}
@@ -240,7 +259,6 @@ export default function AdminFloorPage() {
 
               {editing && (
                 <EditPanel
-                  token={token ?? ""}
                   floor={activeFloor}
                   unplaced={unplaced}
                   selected={selected}
@@ -254,8 +272,9 @@ export default function AdminFloorPage() {
                   onPatchSelected={(patch) =>
                     selectedId && setDraft((p) => ({ ...p, [selectedId]: { ...p[selectedId], ...patch } }))
                   }
-                  onChanged={load}
-                  onError={setError}
+                  onAddTable={(zoneId) => setAddTableZoneId(zoneId)}
+                  onEditZone={(zone) => setZoneModal(zone)}
+                  onDeleteTable={(id, label) => setDeleteConfirm({ type: "table", id, name: `Table ${label}` })}
                 />
               )}
             </div>
@@ -273,6 +292,44 @@ export default function AdminFloorPage() {
         {manageFloors && (
           <ManageFloorsModal token={token ?? ""} onClose={() => setManageFloors(false)} onChanged={load} />
         )}
+        {addTableZoneId && activeFloor && (
+          <AddTableModal
+            token={token ?? ""}
+            floor={activeFloor}
+            defaultZoneId={addTableZoneId}
+            onClose={() => setAddTableZoneId(null)}
+            onSaved={() => { setAddTableZoneId(null); load(); }}
+          />
+        )}
+        {zoneModal && activeFloor && (
+          <ZoneModal
+            token={token ?? ""}
+            zone={zoneModal === "new" ? null : zoneModal}
+            floorId={activeFloor.id ?? ""}
+            onClose={() => setZoneModal(null)}
+            onSaved={() => { setZoneModal(null); load(); }}
+          />
+        )}
+        {deleteConfirm && (
+          <DeleteConfirmModal
+            type={deleteConfirm.type}
+            name={deleteConfirm.name}
+            token={token ?? ""}
+            id={deleteConfirm.id}
+            onConfirm={async () => {
+              try {
+                if (deleteConfirm.type === "table") await api.adminDeleteTable(token ?? "", deleteConfirm.id);
+                else await api.adminDeleteZone(token ?? "", deleteConfirm.id);
+                setDeleteConfirm(null);
+                load();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+                setDeleteConfirm(null);
+              }
+            }}
+            onCancel={() => setDeleteConfirm(null)}
+          />
+        )}
       </AdminShell>
     </AppShell>
   );
@@ -288,75 +345,72 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 function EditPanel({
-  token,
   floor,
   unplaced,
   selected,
   draft,
   onPlace,
   onPatchSelected,
-  onChanged,
-  onError,
+  onAddTable,
+  onEditZone,
+  onDeleteTable,
 }: {
-  token: string;
   floor: FloorMapFloorAPI;
   unplaced: { id: string; label: string; zoneId: string }[];
   selected: CanvasTable | null;
   draft: Draft | null;
   onPlace: (id: string) => void;
   onPatchSelected: (patch: Partial<Draft>) => void;
-  onChanged: () => void;
-  onError: (e: string) => void;
+  onAddTable: (zoneId: string) => void;
+  onEditZone: (zone: FloorZoneAPI) => void;
+  onDeleteTable: (id: string, label: string) => void;
 }) {
   const zones = floor.zones;
 
-  const addTable = async () => {
-    if (zones.length === 0) {
-      onError("Add a zone to this floor first (Tables & QR).");
-      return;
-    }
-    const label = window.prompt("New table label / number?");
-    if (!label?.trim()) return;
-    try {
-      await api.adminCreateTable(token, {
-        zone_id: zones[0].id,
-        label: label.trim(),
-        seats: 2,
-        shape: "round",
-        pos_x: Math.round(floor.width / 2),
-        pos_y: Math.round(floor.height / 2),
-      });
-      onChanged();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  const removeSelected = async () => {
-    if (!selected) return;
-    if (!confirm(`Delete table "${selected.label}"?`)) return;
-    try {
-      await api.adminDeleteTable(token, selected.id);
-      onChanged();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   return (
     <Card className="p-4 h-fit space-y-4">
-      <Button variant="primary" icon="add" onClick={addTable} className="w-full justify-center">Add table</Button>
+      {/* Zone list with quick actions */}
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-2">Zones</p>
+        {zones.length === 0 ? (
+          <p className="text-xs text-ink-faint">No zones on this floor yet.</p>
+        ) : (
+          <ul className="space-y-1">
+            {zones.map((z) => (
+              <li key={z.id} className="group flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 hover:bg-paper-sunken transition-colors">
+                <span className="flex-1 text-ink font-medium truncate">
+                  {z.name}{z.is_ac ? " ❄" : ""}
+                </span>
+                <button
+                  title="Add table to zone"
+                  onClick={() => onAddTable(z.id)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-faint hover:text-primary transition-all"
+                >
+                  <span className="material-symbols-outlined text-[13px]">add</span>
+                </button>
+                <button
+                  title="Edit zone"
+                  onClick={() => onEditZone(z)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-faint hover:text-primary transition-all"
+                >
+                  <span className="material-symbols-outlined text-[13px]">edit</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {unplaced.length > 0 && (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft mb-2">Not placed yet</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-2">Not placed yet</p>
           <div className="flex flex-wrap gap-1.5">
             {unplaced.map((u) => (
               <button
                 key={u.id}
                 onClick={() => onPlace(u.id)}
-                className="px-2 py-1 rounded-md border border-line text-xs hover:border-primary/40"
-                title="Drop onto the plan"
+                className="px-2 py-1 rounded-md border border-line text-xs hover:border-primary/40 transition-colors"
+                title="Click to place on canvas"
               >
                 + {u.label}
               </button>
@@ -366,9 +420,9 @@ function EditPanel({
       )}
 
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft mb-2">Selected table</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-2">Selected table</p>
         {!selected || !draft ? (
-          <p className="text-sm text-ink-faint">Click a table on the plan to edit it.</p>
+          <p className="text-sm text-ink-faint">Click a table on the plan to select it.</p>
         ) : (
           <div className="space-y-2.5">
             <div className="font-headline font-semibold text-ink">Table {selected.label} · {selected.seats}p</div>
@@ -388,11 +442,21 @@ function EditPanel({
                 ))}
               </Select>
             </label>
-            <Button variant="danger" icon="delete" onClick={removeSelected} className="w-full justify-center">Delete table</Button>
+            <Button
+              variant="danger"
+              icon="delete"
+              onClick={() => onDeleteTable(selected.id, selected.label)}
+              className="w-full justify-center"
+            >
+              Delete table
+            </Button>
           </div>
         )}
       </div>
-      <p className="text-[11px] text-ink-faint">Drag tables to position them. Seats &amp; labels are edited in Tables &amp; QR.</p>
+      <p className="text-[11px] text-ink-faint leading-relaxed">
+        Drag tables to reposition. Edit seats &amp; labels in{" "}
+        <a href="/admin/tables" className="underline hover:text-primary">Tables &amp; QR</a>.
+      </p>
     </Card>
   );
 }
@@ -536,6 +600,256 @@ function SettleModal({
           </div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+// ─── AddTableModal ─────────────────────────────────────────────────────────────
+
+function AddTableModal({
+  token,
+  floor,
+  defaultZoneId,
+  onClose,
+  onSaved,
+}: {
+  token: string;
+  floor: FloorMapFloorAPI;
+  defaultZoneId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [zoneId, setZoneId] = useState(defaultZoneId);
+  const [label, setLabel] = useState("");
+  const [seats, setSeats] = useState(2);
+  const [shape, setShape] = useState<"round" | "square" | "rect">("rect");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!label.trim()) { setErr("Label is required."); return; }
+    setBusy(true);
+    setErr("");
+    try {
+      await api.adminCreateTable(token, {
+        zone_id: zoneId,
+        label: label.trim(),
+        seats,
+        shape,
+        pos_x: Math.round(floor.width / 2),
+        pos_y: Math.round(floor.height / 2),
+      } as TableWriteAPI);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="New table"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={busy}>
+            {busy ? "Creating…" : "Create table"}
+          </Button>
+        </>
+      }
+    >
+      {err && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-3">{err}</div>}
+      <label className="block mb-3">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Zone</span>
+        <Select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className="w-full mt-1.5">
+          {floor.zones.map((z) => (
+            <option key={z.id} value={z.id}>{z.name}{z.is_ac ? " (AC)" : ""}</option>
+          ))}
+        </Select>
+      </label>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <label className="block">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Label</span>
+          <Input
+            autoFocus
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="e.g. 7 or T3"
+            className="w-full mt-1.5"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Seats</span>
+          <Input
+            type="number"
+            min={1}
+            max={20}
+            value={seats.toString()}
+            onChange={(e) => setSeats(Math.max(1, Number(e.target.value)))}
+            className="w-full mt-1.5"
+          />
+        </label>
+      </div>
+      <label className="block">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Shape</span>
+        <div className="flex gap-2 mt-1.5">
+          {(["rect", "square", "round"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setShape(s)}
+              className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-semibold transition-all ${
+                shape === s
+                  ? "border-primary bg-primary/8 text-primary"
+                  : "border-line text-ink-soft hover:border-line-strong"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                {s === "round" ? "circle" : s === "square" ? "crop_square" : "crop_landscape"}
+              </span>
+              {s[0].toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </label>
+    </Modal>
+  );
+}
+
+// ─── ZoneModal ─────────────────────────────────────────────────────────────────
+
+function ZoneModal({
+  token,
+  zone,
+  floorId,
+  onClose,
+  onSaved,
+}: {
+  token: string;
+  zone: FloorZoneAPI | null;
+  floorId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = zone !== null;
+  const [name, setName] = useState(zone?.name ?? "");
+  const [isAc, setIsAc] = useState(zone?.is_ac ?? false);
+  const [active, setActive] = useState(zone?.active ?? true);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim()) { setErr("Zone name is required."); return; }
+    setBusy(true);
+    setErr("");
+    try {
+      const body: ZoneWriteAPI = {
+        name: name.trim(),
+        is_ac: isAc,
+        active,
+        ...(floorId ? { floor_id: floorId } : {}),
+      };
+      if (isEdit) {
+        await api.adminUpdateZone(token, zone!.id, body);
+      } else {
+        await api.adminCreateZone(token, body);
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={isEdit ? `Edit zone · ${zone!.name}` : "New zone"}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={busy}>
+            {busy ? "Saving…" : isEdit ? "Save" : "Create zone"}
+          </Button>
+        </>
+      }
+    >
+      {err && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-3">{err}</div>}
+      <label className="block mb-3">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Zone name</span>
+        <Input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="e.g. AC Hall, Garden, Rooftop"
+          className="w-full mt-1.5"
+        />
+      </label>
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={isAc}
+            onChange={(e) => setIsAc(e.target.checked)}
+            className="w-4 h-4 accent-primary"
+          />
+          <span className="material-symbols-outlined text-[15px] text-sky-500">ac_unit</span>
+          <span className="text-sm text-ink">Air-conditioned</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="w-4 h-4 accent-primary"
+          />
+          <span className="material-symbols-outlined text-[15px] text-ink-soft">check_circle</span>
+          <span className="text-sm text-ink">Active</span>
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── DeleteConfirmModal ─────────────────────────────────────────────────────────
+
+function DeleteConfirmModal({
+  type,
+  name,
+  onConfirm,
+  onCancel,
+}: {
+  type: "zone" | "table";
+  name: string;
+  token: string;
+  id: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      title={`Delete ${type}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button variant="danger" icon="delete" onClick={onConfirm}>Delete</Button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink">
+        Delete <span className="font-semibold">{name}</span>?
+        {type === "zone" && " The zone must be empty (no tables) before it can be deleted."}
+        {" This cannot be undone."}
+      </p>
     </Modal>
   );
 }
