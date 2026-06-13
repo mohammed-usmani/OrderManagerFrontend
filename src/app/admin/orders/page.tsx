@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type AdminOrderAPI } from "@/lib/api";
@@ -322,9 +322,8 @@ export default function AdminOrdersPage() {
                       const isFocused  = focusedIdx === rowIdx;
                       const isNew      = order.status === "confirmed";
                       return (
-                        <>
+                        <React.Fragment key={order.id}>
                           <tr
-                            key={order.id}
                             ref={(el) => { rowRefs.current[rowIdx] = el; }}
                             tabIndex={0}
                             onFocus={() => setFocusedIdx(rowIdx)}
@@ -457,7 +456,7 @@ export default function AdminOrdersPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>

@@ -15,12 +15,15 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import {
   Button,
   Card,
+  CardHeader,
   Input,
   Modal,
   Select,
   StatusChip,
   Toolbar,
+  EmptyState,
 } from "@/components/admin/ui";
+import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 import { formatPrice } from "@/lib/brand";
 
 type SortKey = "name" | "price" | "category" | "id";
@@ -234,12 +237,16 @@ export default function AdminMenuPage() {
   return (
     <AppShell title="Menu">
       <AdminShell>
+        <AdminKeyboardProvider />
         <PageHeader
           title="Menu"
-          subtitle={`${items.length} items · ${items.filter((i) => !i.available).length} disabled`}
+          badge={items.length}
+          subtitle={`${items.filter((i) => !i.available).length} disabled`}
           actions={
             <>
               <Input
+                data-search
+                leadingIcon="search"
                 placeholder="Search by id, name, description"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -260,7 +267,7 @@ export default function AdminMenuPage() {
             <option value="">All categories</option>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {c[0].toUpperCase() + c.slice(1)}
               </option>
             ))}
           </Select>
@@ -273,6 +280,8 @@ export default function AdminMenuPage() {
             <option value="disabled">Disabled only</option>
           </Select>
           <Input
+            data-search
+            leadingIcon="search"
             placeholder="Search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -280,38 +289,52 @@ export default function AdminMenuPage() {
           />
           <div className="flex-1" />
           {selected.size > 0 && (
-            <>
-              <span className="text-xs text-ink-soft mr-1">{selected.size} selected</span>
-              <Button size="sm" onClick={() => bulkSetAvailability(true)}>
-                Enable
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => bulkSetAvailability(false)}>
-                Disable
-              </Button>
-            </>
+            <div className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg bg-primary/8 border border-primary/20">
+              <span className="text-xs font-semibold text-primary">{selected.size} selected</span>
+              <Button size="xs" onClick={() => bulkSetAvailability(true)}>Enable</Button>
+              <Button size="xs" variant="danger" onClick={() => bulkSetAvailability(false)}>Disable</Button>
+            </div>
           )}
         </Toolbar>
 
-        <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-28 md:pb-8 max-w-[1600px] mx-auto w-full">
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-5 pb-28 md:pb-8 max-w-[1600px] mx-auto w-full">
           {error && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">error</span>
               {error}
             </div>
           )}
 
           {loading && (
-            <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
+            <div className="space-y-2">
+              {[1,2,3,4,5].map((i) => <div key={i} className="skeleton h-14 rounded-xl" />)}
             </div>
           )}
 
-          {!loading && (
+          {!loading && visible.length === 0 && (
+            <EmptyState
+              icon="restaurant_menu"
+              title={search || categoryFilter ? "No items match" : "No menu items yet"}
+              description={search || categoryFilter ? "Try adjusting your search or filters." : "Add your first dish to get started."}
+              action={
+                !search && !categoryFilter ? (
+                  <Button variant="primary" icon="add" onClick={() => setCreateOpen(true)}>Add item</Button>
+                ) : undefined
+              }
+            />
+          )}
+
+          {!loading && visible.length > 0 && (
             <Card className="overflow-hidden">
+              <CardHeader>
+                <p className="font-semibold text-ink text-sm">{visible.length} items</p>
+                <p className="text-xs text-ink-faint">Click a cell to edit inline</p>
+              </CardHeader>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-paper-sunken/50 border-b border-line">
-                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-                      <th className="px-3 py-2 w-10">
+                  <thead className="bg-paper-sunken/70 border-b border-line">
+                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                      <th className="px-4 py-3 w-10">
                         <input
                           type="checkbox"
                           checked={allSelected}
@@ -323,10 +346,10 @@ export default function AdminMenuPage() {
                       <SortableTh label="Name" k="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                       <SortableTh label="Category" k="category" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
                       <SortableTh label="Price" k="price" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} right />
-                      <th className="px-3 py-2">Spice</th>
-                      <th className="px-3 py-2">Serving</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2 w-32 text-right">Actions</th>
+                      <th className="px-4 py-3">Spice</th>
+                      <th className="px-4 py-3">Serving</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 w-32 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -336,11 +359,11 @@ export default function AdminMenuPage() {
                       return (
                         <tr
                           key={item.id}
-                          className={`border-b border-line hover:bg-paper-sunken/60 ${
-                            isSelected ? "bg-paper-sunken/40" : ""
-                          } ${busy ? "opacity-60" : ""}`}
+                          className={`border-b border-line last:border-0 transition-colors ${
+                            isSelected ? "bg-primary/5" : "hover:bg-paper-sunken/50"
+                          } ${busy ? "opacity-50 pointer-events-none" : ""}`}
                         >
-                          <td className="px-3 py-2">
+                          <td className="px-4 py-3">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -348,7 +371,11 @@ export default function AdminMenuPage() {
                               className="cursor-pointer"
                             />
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs text-ink-soft">{item.id}</td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-[11px] text-ink-faint bg-paper-sunken border border-line px-1.5 py-0.5 rounded">
+                              {item.id}
+                            </span>
+                          </td>
                           <EditableCell
                             active={editingCell?.id === item.id && editingCell.field === "name"}
                             draft={cellDraft}
@@ -403,38 +430,33 @@ export default function AdminMenuPage() {
                           >
                             <span className="text-ink-soft">{item.serving || "—"}</span>
                           </EditableCell>
-                          <td className="px-3 py-2">
+                          <td className="px-4 py-3">
                             <StatusChip status={item.available ? "available" : "disabled"} />
                           </td>
-                          <td className="px-3 py-2 text-right">
+                          <td className="px-4 py-3 text-right">
                             <Button
                               size="sm"
                               variant={item.available ? "ghost" : "secondary"}
+                              icon={item.available ? "visibility_off" : "visibility"}
                               onClick={() => toggleAvailability(item)}
                               disabled={busy}
                             >
-                              {item.available ? "Disable" : "Enable"}
+                              {item.available ? "Hide" : "Show"}
                             </Button>
                           </td>
                         </tr>
                       );
                     })}
-                    {visible.length === 0 && (
-                      <tr>
-                        <td colSpan={9} className="px-3 py-10 text-center text-ink-soft text-sm">
-                          No items match these filters.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
             </Card>
           )}
 
-          <p className="text-xs text-ink-soft mt-3">
-            Click any cell to edit. Press <kbd className="px-1 py-0.5 border border-line-strong rounded bg-paper-raised">Enter</kbd> to save,{" "}
-            <kbd className="px-1 py-0.5 border border-line-strong rounded bg-paper-raised">Esc</kbd> to cancel.
+          <p className="text-xs text-ink-faint mt-3 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px]">touch_app</span>
+            Click any cell to edit inline.
+            Press <kbd>Enter</kbd> to save, <kbd>Esc</kbd> to cancel.
             Changes apply live to the voice agent and customer views.
           </p>
         </main>
@@ -475,7 +497,7 @@ function SortableTh({
   return (
     <th
       onClick={() => onClick(k)}
-      className={`px-3 py-2 cursor-pointer select-none hover:text-ink ${
+      className={`px-4 py-3 cursor-pointer select-none hover:text-ink transition-colors ${
         right ? "text-right" : ""
       }`}
     >
@@ -516,7 +538,7 @@ function EditableCell({
 }) {
   if (active) {
     return (
-      <td className="px-3 py-1 align-middle">
+      <td className="px-4 py-2 align-middle">
         <input
           autoFocus
           value={draft}
@@ -531,7 +553,7 @@ function EditableCell({
             }
           }}
           inputMode={inputMode}
-          className={`w-full h-7 px-2 rounded border border-primary bg-paper-raised text-sm text-ink focus:outline-none ${
+          className={`w-full h-7 px-2.5 rounded-lg border border-primary bg-paper-raised text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/20 ${
             right ? "text-right tabular-nums" : ""
           }`}
         />
@@ -541,7 +563,7 @@ function EditableCell({
   return (
     <td
       onClick={onBeginEdit}
-      className={`px-3 py-2 cursor-text hover:bg-paper-sunken/50 ${right ? "text-right" : ""}`}
+      className={`px-4 py-3 cursor-text group/cell relative hover:bg-paper-sunken/50 transition-colors ${right ? "text-right" : ""}`}
     >
       {children}
     </td>

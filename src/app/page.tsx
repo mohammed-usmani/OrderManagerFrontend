@@ -89,6 +89,13 @@ export default function LandingPage() {
   const router = useRouter();
   const [openState, setOpenState] = useState<OpenState | null>(null);
   const [dishes, setDishes] = useState<Dish[]>(FALLBACK_DISHES);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 32);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Only staff get redirected to the back-office; the public stays here.
   useEffect(() => {
@@ -118,8 +125,8 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh flex flex-col">
-      {/* Header */}
-      <header className="flex justify-between items-center px-5 md:px-8 py-4 w-full fixed top-0 z-50 bg-[#14100c]/50 backdrop-blur-2xl border-b border-white/5">
+      {/* Header — becomes more opaque after scrolling past hero */}
+      <header className={`flex justify-between items-center px-5 md:px-8 py-4 w-full fixed top-0 z-50 border-b transition-all duration-300 ${scrolled ? "bg-[#14100c]/85 backdrop-blur-2xl border-white/8 shadow-lg shadow-black/20" : "bg-[#14100c]/30 backdrop-blur-xl border-white/0"}`}>
         <div className="flex items-center gap-2.5">
           <span className="material-symbols-outlined text-primary text-[26px]" style={{ fontVariationSettings: "'FILL' 1" }}>
             local_fire_department
@@ -219,33 +226,48 @@ export default function LandingPage() {
           {dishes.map((d, i) => (
             <article
               key={`${d.name}-${i}`}
-              className="reveal group rounded-2xl ember-card overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_18px_50px_-20px_rgba(255,106,26,0.45)]"
+              className="reveal group rounded-2xl ember-card overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/35 hover:shadow-[0_22px_55px_-18px_rgba(255,106,26,0.5)]"
               style={{ animationDelay: `${i * 70}ms` }}
             >
-              <div className={`relative h-36 md:h-44 bg-gradient-to-br ${d.accent}`}>
+              <div className={`relative h-40 md:h-48 bg-gradient-to-br ${d.accent}`}>
                 {d.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={d.image}
                     alt={d.name}
                     loading="lazy"
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.07]"
                   />
                 ) : (
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,200,120,0.18),transparent_60%)]" />
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,200,120,0.22),transparent_65%)]" />
                 )}
-                <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#140f09] via-[#140f09]/40 to-transparent" />
-                <span className="absolute top-2.5 left-3 px-2 py-0.5 rounded-full bg-black/35 backdrop-blur-sm text-[9px] font-semibold uppercase tracking-[0.2em] text-on-surface/95">{d.tag}</span>
+                {/* Gradient overlay: always present for text legibility */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#140f09]/90 via-[#140f09]/20 to-transparent" />
+                {/* Tag chip */}
+                <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-sm text-[9px] font-bold uppercase tracking-[0.2em] text-white/90">
+                  {d.tag}
+                </span>
+                {/* Heat dots */}
                 {d.heat > 0 && (
-                  <span className="absolute top-2.5 right-3 inline-flex gap-0.5">
+                  <span className="absolute top-2.5 right-2.5 inline-flex gap-0.5 items-center">
                     {Array.from({ length: d.heat }).map((_, j) => (
-                      <span key={j} className="material-symbols-outlined text-[13px] text-primary drop-shadow" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
+                      <span
+                        key={j}
+                        className="material-symbols-outlined text-[12px] text-primary drop-shadow-sm"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        local_fire_department
+                      </span>
                     ))}
                   </span>
                 )}
+                {/* Name overlaid at bottom of image */}
+                <div className="absolute inset-x-0 bottom-0 px-3.5 pb-3">
+                  <h3 className="font-headline font-semibold text-white text-base leading-tight">{d.name}</h3>
+                </div>
               </div>
-              <div className="px-4 py-3.5">
-                <h3 className="font-headline font-semibold text-on-surface text-base leading-tight mb-1">{d.name}</h3>
+              {/* Blurb below image */}
+              <div className="px-3.5 py-3">
                 <p className="text-on-surface-variant text-xs leading-relaxed line-clamp-2">{d.blurb}</p>
               </div>
             </article>
