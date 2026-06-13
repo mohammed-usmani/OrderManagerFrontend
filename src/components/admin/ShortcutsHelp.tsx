@@ -5,43 +5,48 @@
 interface ShortcutsHelpProps {
   open: boolean;
   onClose: () => void;
+  isMac?: boolean;
 }
 
-const SHORTCUT_GROUPS = [
-  {
-    group: "Navigation",
-    shortcuts: [
-      { keys: ["G", "D"], label: "Go to Dashboard" },
-      { keys: ["G", "K"], label: "Go to Kitchen" },
-      { keys: ["G", "F"], label: "Go to Floor Plan" },
-      { keys: ["G", "M"], label: "Go to Menu" },
-      { keys: ["G", "A"], label: "Go to Analytics" },
-      { keys: ["G", "C"], label: "Go to Customers" },
-    ],
-  },
-  {
-    group: "Global",
-    shortcuts: [
-      { keys: ["⌘", "K"], label: "Open command palette" },
-      { keys: ["/"],       label: "Focus search" },
-      { keys: ["?"],       label: "Show this help" },
-      { keys: ["Esc"],     label: "Close / cancel" },
-    ],
-  },
-  {
-    group: "Tables & Lists",
-    shortcuts: [
-      { keys: ["J"],   label: "Move focus down" },
-      { keys: ["K"],   label: "Move focus up" },
-      { keys: ["↵"],   label: "Primary action on row" },
-      { keys: ["E"],   label: "Edit focused row" },
-      { keys: ["X"],   label: "Select / toggle row" },
-      { keys: ["Spc"], label: "Expand / collapse" },
-    ],
-  },
-];
+function buildGroups(isMac: boolean) {
+  const mod = isMac ? "⌘" : "Ctrl";
+  return [
+    {
+      group: "Navigation",
+      shortcuts: [
+        { keys: ["G", "D"], label: "Go to Dashboard" },
+        { keys: ["G", "K"], label: "Go to Kitchen" },
+        { keys: ["G", "F"], label: "Go to Floor Plan" },
+        { keys: ["G", "M"], label: "Go to Menu" },
+        { keys: ["G", "A"], label: "Go to Analytics" },
+        { keys: ["G", "C"], label: "Go to Customers" },
+      ],
+    },
+    {
+      group: "Global",
+      shortcuts: [
+        { keys: [mod, "K"], label: "Open command palette" },
+        { keys: ["/"],      label: "Focus search" },
+        { keys: ["?"],      label: "Show this help" },
+        { keys: ["Esc"],    label: "Close / cancel" },
+      ],
+    },
+    {
+      group: "Tables & Lists",
+      shortcuts: [
+        { keys: ["J"],   label: "Move focus down" },
+        { keys: ["K"],   label: "Move focus up" },
+        { keys: ["↵"],   label: "Primary action on row" },
+        { keys: ["E"],   label: "Edit focused row" },
+        { keys: ["X"],   label: "Select / toggle row" },
+        { keys: ["Spc"], label: "Expand / collapse" },
+      ],
+    },
+  ];
+}
 
-export function ShortcutsHelp({ open, onClose }: ShortcutsHelpProps) {
+export function ShortcutsHelp({ open, onClose, isMac = false }: ShortcutsHelpProps) {
+  const SHORTCUT_GROUPS = buildGroups(isMac);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">

@@ -47,7 +47,10 @@ export default function AdminOrdersPage() {
 
   const [filter, setFilter]     = useState<Filter>("active");
   const [orders, setOrders]     = useState<AdminOrderAPI[]>([]);
+  // `loading` = true only on the very first fetch (no data yet → show skeleton).
+  // `refreshing` = true on subsequent fetches (data exists → keep table, show spinner).
   const [loading, setLoading]   = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError]       = useState("");
   const [busyIds, setBusyIds]   = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -64,8 +67,16 @@ export default function AdminOrdersPage() {
     if (user && !user.is_admin) router.replace("/chat");
   }, [isAuthenticated, user, router]);
 
+  // Tracks whether this is the very first load (orders array is empty).
+  const isFirstLoad = useRef(true);
+
   const load = useCallback(async () => {
     if (!token) return;
+    if (isFirstLoad.current) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     try {
       const data = await api.adminListOrders(token, filter);
       setOrders(data);
@@ -74,11 +85,21 @@ export default function AdminOrdersPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      isFirstLoad.current = false;
     }
   }, [token, filter]);
 
+  // When filter changes reset to "first-load" mode so the skeleton shows
+  // only if there was no prior data for that filter.
   useEffect(() => {
-    setLoading(true);
+    // Clear stale data immediately so the previous filter's rows don't flash
+    // while the new request is in-flight.
+    setOrders([]);
+    isFirstLoad.current = true;
+  }, [filter]);
+
+  useEffect(() => {
     load();
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
@@ -257,8 +278,8 @@ export default function AdminOrdersPage() {
               <Button size="sm" variant="danger" onClick={bulkCancel}>Cancel selected</Button>
             </div>
           )}
-          {loading && orders.length > 0 && (
-            <div className="w-4 h-4 border-2 border-line-strong border-t-primary rounded-full animate-spin shrink-0" />
+          {refreshing && (
+            <div className="w-4 h-4 border-2 border-line-strong border-t-primary rounded-full animate-spin shrink-0" title="Refreshing…" />
           )}
         </Toolbar>
 

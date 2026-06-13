@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -48,6 +48,7 @@ export default function AdminMenuPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItemAPI | null>(null);
 
   // Inline editing
   type EditableField = "name" | "price" | "spice_level" | "serving" | "category";
@@ -434,15 +435,26 @@ export default function AdminMenuPage() {
                             <StatusChip status={item.available ? "available" : "disabled"} />
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <Button
-                              size="sm"
-                              variant={item.available ? "ghost" : "secondary"}
-                              icon={item.available ? "visibility_off" : "visibility"}
-                              onClick={() => toggleAvailability(item)}
-                              disabled={busy}
-                            >
-                              {item.available ? "Hide" : "Show"}
-                            </Button>
+                            <div className="inline-flex items-center gap-1 justify-end">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                icon="edit"
+                                onClick={() => setEditingItem(item)}
+                                disabled={busy}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={item.available ? "ghost" : "secondary"}
+                                icon={item.available ? "visibility_off" : "visibility"}
+                                onClick={() => toggleAvailability(item)}
+                                disabled={busy}
+                              >
+                                {item.available ? "Hide" : "Show"}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -469,6 +481,15 @@ export default function AdminMenuPage() {
             load();
           }}
           existingIds={items.map((i) => i.id)}
+          token={token ?? ""}
+        />
+        <EditItemModal
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSaved={() => {
+            setEditingItem(null);
+            load();
+          }}
           token={token ?? ""}
         />
       </AdminShell>
@@ -567,6 +588,199 @@ function EditableCell({
     >
       {children}
     </td>
+  );
+}
+
+// --- Edit-item modal (all fields) -----------------------------------------
+
+function EditItemModal({
+  item,
+  onClose,
+  onSaved,
+  token,
+}: {
+  item: MenuItemAPI | null;
+  onClose: () => void;
+  onSaved: () => void;
+  token: string;
+}) {
+  const [form, setForm] = useState<MenuItemPatchAPI>({});
+  const [dietaryStr, setDietaryStr] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // Populate when item changes
+  useEffect(() => {
+    if (!item) { setForm({}); setDietaryStr(""); setErr(""); setBusy(false); return; }
+    setForm({
+      name:          item.name,
+      category:      item.category,
+      price:         item.price,
+      description:   item.description,
+      how_its_made:  item.how_its_made ?? null,
+      taste_profile: item.taste_profile ?? null,
+      spice_level:   item.spice_level,
+      serving:       item.serving,
+      dietary:       item.dietary,
+      popularity:    item.popularity ?? null,
+      popularity_note: item.popularity_note ?? null,
+      image_url:     item.image_url,
+      available:     item.available,
+    });
+    setDietaryStr((item.dietary ?? []).join(", "));
+    setErr("");
+  }, [item]);
+
+  const onPickImage = async (file: File | undefined) => {
+    if (!file || !token) return;
+    setUploading(true);
+    setErr("");
+    try {
+      const { image_url } = await api.adminUploadMenuImage(token, file);
+      setForm((f) => ({ ...f, image_url }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!item || !token) return;
+    if (!form.name || !form.category) { setErr("Name and category are required."); return; }
+    const dietary = dietaryStr.split(",").map((s) => s.trim()).filter(Boolean);
+    setBusy(true);
+    setErr("");
+    try {
+      await api.adminUpdateMenuItem(token, item.id, { ...form, dietary: dietary.length ? dietary : null });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={!!item}
+      onClose={onClose}
+      title={item ? `Edit · ${item.name}` : "Edit item"}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={busy || uploading}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </>
+      }
+    >
+      {err && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {err}
+        </div>
+      )}
+
+      <ImageUploadField
+        imageUrl={form.image_url ?? ""}
+        uploading={uploading}
+        onPick={onPickImage}
+        onUrlChange={(v) => setForm((f) => ({ ...f, image_url: v || null }))}
+        onClear={() => setForm((f) => ({ ...f, image_url: null }))}
+      />
+
+      <div className="grid grid-cols-2 gap-3 mt-1">
+        <Labeled label={`ID (read-only)`} full>
+          <Input value={item?.id ?? ""} disabled className="opacity-60 cursor-not-allowed" />
+        </Labeled>
+        <Labeled label="Category">
+          <Select
+            value={form.category ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>
+            ))}
+          </Select>
+        </Labeled>
+        <Labeled label="Name" full>
+          <Input value={form.name ?? ""} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        </Labeled>
+        <Labeled label="Price (₹)">
+          <Input
+            inputMode="decimal"
+            value={form.price == null ? "" : String(form.price)}
+            onChange={(e) => setForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))}
+          />
+        </Labeled>
+        <Labeled label="Serving">
+          <Input
+            value={form.serving ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, serving: e.target.value || null }))}
+            placeholder="e.g. serves 2 / 6 pieces"
+          />
+        </Labeled>
+        <Labeled label="Spice level">
+          <Input
+            value={form.spice_level ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, spice_level: e.target.value || null }))}
+            placeholder="mild / medium / hot"
+          />
+        </Labeled>
+        <Labeled label="Dietary (comma-separated)">
+          <Input
+            value={dietaryStr}
+            onChange={(e) => setDietaryStr(e.target.value)}
+            placeholder="vegan, gluten-free"
+          />
+        </Labeled>
+        <Labeled label="Taste profile" full>
+          <Input
+            value={form.taste_profile ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, taste_profile: e.target.value || null }))}
+            placeholder="rich, creamy, mildly sweet"
+          />
+        </Labeled>
+        <Labeled label="Description" full>
+          <Input
+            value={form.description ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value || null }))}
+          />
+        </Labeled>
+        <Labeled label="How it's made" full>
+          <Input
+            value={form.how_its_made ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, how_its_made: e.target.value || null }))}
+          />
+        </Labeled>
+        <Labeled label="Popularity (1–5)">
+          <Input
+            inputMode="decimal"
+            value={form.popularity == null ? "" : String(form.popularity)}
+            onChange={(e) => setForm((f) => ({ ...f, popularity: e.target.value ? parseFloat(e.target.value) : null }))}
+          />
+        </Labeled>
+        <Labeled label="Popularity note">
+          <Input
+            value={form.popularity_note ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, popularity_note: e.target.value || null }))}
+            placeholder="Our #1 seller"
+          />
+        </Labeled>
+        <Labeled label="Available">
+          <label className="flex items-center gap-2 h-9 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.available ?? true}
+              onChange={(e) => setForm((f) => ({ ...f, available: e.target.checked }))}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <span className="text-sm text-ink-soft">Visible to customers</span>
+          </label>
+        </Labeled>
+      </div>
+    </Modal>
   );
 }
 
