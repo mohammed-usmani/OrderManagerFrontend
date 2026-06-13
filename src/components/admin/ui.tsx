@@ -9,6 +9,7 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
   useEffect,
   useRef,
@@ -71,8 +72,12 @@ export function Button({
 export function Input({
   className = "",
   leadingIcon,
+  ref,
   ...rest
-}: InputHTMLAttributes<HTMLInputElement> & { leadingIcon?: string }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  leadingIcon?: string;
+  ref?: Ref<HTMLInputElement>;
+}) {
   if (leadingIcon) {
     return (
       <div className="relative flex items-center">
@@ -80,6 +85,7 @@ export function Input({
           {leadingIcon}
         </span>
         <input
+          ref={ref}
           className={`h-9 pl-8 pr-3 rounded-lg border border-line-strong bg-paper-raised text-sm text-ink placeholder:text-ink-faint/70 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all ${className}`}
           {...rest}
         />
@@ -88,6 +94,7 @@ export function Input({
   }
   return (
     <input
+      ref={ref}
       className={`h-9 px-3 rounded-lg border border-line-strong bg-paper-raised text-sm text-ink placeholder:text-ink-faint/70 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all ${className}`}
       {...rest}
     />
