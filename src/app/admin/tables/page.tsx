@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
+  type FloorAPI,
   type TableAPI,
   type TableWriteAPI,
   type ZoneAPI,
@@ -30,6 +31,7 @@ export default function AdminTablesPage() {
 
   const [zones, setZones] = useState<ZoneAPI[]>([]);
   const [tables, setTables] = useState<TableAPI[]>([]);
+  const [floors, setFloors] = useState<FloorAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -48,12 +50,14 @@ export default function AdminTablesPage() {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [z, t] = await Promise.all([
+      const [z, t, f] = await Promise.all([
         api.adminListZones(token),
         api.adminListTables(token),
+        api.adminListFloors(token),
       ]);
       setZones(z);
       setTables(t);
+      setFloors(f);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -209,6 +213,7 @@ export default function AdminTablesPage() {
         {zoneModal && (
           <ZoneModal
             zone={zoneModal === "new" ? null : zoneModal}
+            floors={floors}
             token={token ?? ""}
             onClose={() => setZoneModal(null)}
             onSaved={() => {
@@ -240,17 +245,20 @@ export default function AdminTablesPage() {
 
 function ZoneModal({
   zone,
+  floors,
   token,
   onClose,
   onSaved,
 }: {
   zone: ZoneAPI | null;
+  floors: FloorAPI[];
   token: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isEdit = zone !== null;
   const [name, setName] = useState(zone?.name ?? "");
+  const [floorId, setFloorId] = useState(zone?.floor_id ?? floors[0]?.id ?? "");
   const [isAc, setIsAc] = useState(zone?.is_ac ?? false);
   const [order, setOrder] = useState(zone?.display_order ?? 0);
   const [active, setActive] = useState(zone?.active ?? true);
@@ -264,6 +272,7 @@ function ZoneModal({
     }
     const body: ZoneWriteAPI = {
       name: name.trim(),
+      floor_id: floorId || null,
       is_ac: isAc,
       display_order: order,
       active,
@@ -304,6 +313,14 @@ function ZoneModal({
       )}
       <Field label="Zone name">
         <Input value={name} onChange={(e) => setName(e.target.value)} className="w-full" placeholder="AC Hall" />
+      </Field>
+      <Field label="Floor">
+        <Select value={floorId} onChange={(e) => setFloorId(e.target.value)} className="w-full">
+          {floors.length === 0 && <option value="">No floors — add one first</option>}
+          {floors.map((f) => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+        </Select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Display order">
@@ -348,6 +365,7 @@ function TableModal({
   const [zoneId, setZoneId] = useState(table?.zone_id ?? defaultZoneId);
   const [label, setLabel] = useState(table?.label ?? "");
   const [seats, setSeats] = useState(table?.seats ?? 2);
+  const [shape, setShape] = useState(table?.shape ?? "round");
   const [active, setActive] = useState(table?.active ?? true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -357,7 +375,7 @@ function TableModal({
       setErr("Label is required.");
       return;
     }
-    const body: TableWriteAPI = { zone_id: zoneId, label: label.trim(), seats, active };
+    const body: TableWriteAPI = { zone_id: zoneId, label: label.trim(), seats, shape, active };
     setBusy(true);
     setErr("");
     try {
@@ -416,6 +434,13 @@ function TableModal({
           />
         </Field>
       </div>
+      <Field label="Shape (floor plan)">
+        <Select value={shape} onChange={(e) => setShape(e.target.value)} className="w-full">
+          <option value="round">Round</option>
+          <option value="square">Square</option>
+          <option value="rect">Rectangle</option>
+        </Select>
+      </Field>
       <label className="flex items-center gap-2 text-sm text-ink">
         <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
         Active

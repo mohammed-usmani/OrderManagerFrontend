@@ -208,6 +208,22 @@ export default function AdminAnalyticsPage() {
                 </Card>
               </div>
 
+              {/* Revenue by floor (dine-in) */}
+              <Card>
+                <CardHeader><p className="font-semibold text-ink text-sm">Revenue by Floor (Dine-in)</p></CardHeader>
+                <CardBody>
+                  <BarList
+                    rows={overview.by_floor.map((f) => ({
+                      label: f.floor,
+                      value: f.revenue,
+                      sub: `${f.orders} order${f.orders === 1 ? "" : "s"}`,
+                    }))}
+                    valueFmt={formatPrice}
+                    emptyText="No dine-in orders yet."
+                  />
+                </CardBody>
+              </Card>
+
               {/* Peak hours */}
               <Card>
                 <CardHeader>

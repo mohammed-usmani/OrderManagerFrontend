@@ -204,6 +204,15 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // Floors (admin)
+  adminListFloors: (token: string) => apiFetch<FloorAPI[]>("/floors", { token }),
+  adminCreateFloor: (token: string, body: FloorWriteAPI) =>
+    apiFetch<FloorAPI>("/floors", { method: "POST", token, body: JSON.stringify(body) }),
+  adminUpdateFloor: (token: string, id: string, body: FloorWriteAPI) =>
+    apiFetch<FloorAPI>(`/floors/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
+  adminDeleteFloor: (token: string, id: string) =>
+    apiFetch<void>(`/floors/${id}`, { method: "DELETE", token }),
+
   // Zones (admin)
   adminListZones: (token: string) => apiFetch<ZoneAPI[]>("/zones", { token }),
   adminCreateZone: (token: string, body: ZoneWriteAPI) =>
@@ -222,7 +231,13 @@ export const api = {
     apiFetch<TableAPI>(`/tables/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
   adminDeleteTable: (token: string, id: string) =>
     apiFetch<void>(`/tables/${id}`, { method: "DELETE", token }),
-  adminFloorMap: (token: string) => apiFetch<FloorZoneAPI[]>("/tables/floor", { token }),
+  adminSaveTablePositions: (token: string, tables: TablePositionAPI[]) =>
+    apiFetch<{ updated: number }>("/tables/positions", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ tables }),
+    }),
+  adminFloorMap: (token: string) => apiFetch<FloorMapFloorAPI[]>("/tables/floor", { token }),
   adminGetTableSession: (token: string, id: string) =>
     apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}`, { token }),
   adminSettleTableSession: (token: string, id: string) =>
@@ -302,6 +317,12 @@ export interface ZoneStatAPI {
   revenue: number;
 }
 
+export interface FloorStatAPI {
+  floor: string;
+  orders: number;
+  revenue: number;
+}
+
 export interface AnalyticsOverviewAPI {
   range: string;
   range_start: string;
@@ -313,6 +334,7 @@ export interface AnalyticsOverviewAPI {
   avg_ticket: number;
   split: { dine_in: SplitBucketAPI; parcel: SplitBucketAPI };
   by_zone: ZoneStatAPI[];
+  by_floor: FloorStatAPI[];
   top_items: AnalyticsTopItem[];
   dine_in_sessions: number;
   active_tables: number;
@@ -389,6 +411,7 @@ export interface AdminOrderAPI {
   table_label: string | null;
   table_session_id: string | null;
   zone_name: string | null;
+  floor_name: string | null;
   is_ac: boolean | null;
   next_statuses: string[];
   item_count: number;
@@ -398,10 +421,29 @@ export interface AdminOrderAPI {
   items: AdminOrderItemAPI[];
 }
 
-// Zones, tables, floor map (dine-in)
+// Floors, zones, tables, floor map (dine-in)
+
+export interface FloorAPI {
+  id: string;
+  name: string;
+  display_order: number;
+  active: boolean;
+  width: number;
+  height: number;
+  created_at: string;
+}
+
+export interface FloorWriteAPI {
+  name?: string;
+  display_order?: number;
+  active?: boolean;
+  width?: number;
+  height?: number;
+}
 
 export interface ZoneAPI {
   id: string;
+  floor_id: string | null;
   name: string;
   is_ac: boolean;
   display_order: number;
@@ -411,6 +453,7 @@ export interface ZoneAPI {
 
 export interface ZoneWriteAPI {
   name?: string;
+  floor_id?: string | null;
   is_ac?: boolean;
   display_order?: number;
   active?: boolean;
@@ -423,6 +466,7 @@ export interface TableAPI {
   seats: number;
   pos_x: number | null;
   pos_y: number | null;
+  shape: string;
   qr_token: string;
   status: string;
   active: boolean;
@@ -435,8 +479,17 @@ export interface TableWriteAPI {
   seats?: number;
   pos_x?: number | null;
   pos_y?: number | null;
+  shape?: string;
   status?: string;
   active?: boolean;
+}
+
+export interface TablePositionAPI {
+  table_id: string;
+  pos_x?: number | null;
+  pos_y?: number | null;
+  shape?: string | null;
+  zone_id?: string | null;
 }
 
 export interface FloorSessionAPI {
@@ -454,6 +507,7 @@ export interface FloorTableAPI {
   seats: number;
   pos_x: number | null;
   pos_y: number | null;
+  shape: string;
   qr_token: string;
   status: string;
   active: boolean;
@@ -467,6 +521,16 @@ export interface FloorZoneAPI {
   display_order: number;
   active: boolean;
   tables: FloorTableAPI[];
+}
+
+export interface FloorMapFloorAPI {
+  id: string | null;
+  name: string;
+  display_order: number;
+  active: boolean;
+  width: number;
+  height: number;
+  zones: FloorZoneAPI[];
 }
 
 export interface TableSessionOrderAPI {
@@ -486,6 +550,7 @@ export interface TableSessionDetailAPI {
   party_size: number | null;
   table_label: string | null;
   zone_name: string | null;
+  floor_name: string | null;
   is_ac: boolean;
   orders: TableSessionOrderAPI[];
   grand_subtotal: number;
@@ -499,6 +564,8 @@ export interface ResolveTableAPI {
   zone_id: string | null;
   zone_name: string | null;
   is_ac: boolean;
+  floor_id: string | null;
+  floor_name: string | null;
 }
 
 export interface ChargeRuleAPI {
