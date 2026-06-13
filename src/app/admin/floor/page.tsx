@@ -274,6 +274,7 @@ export default function AdminFloorPage() {
                   }
                   onAddTable={(zoneId) => setAddTableZoneId(zoneId)}
                   onEditZone={(zone) => setZoneModal(zone)}
+                  onDeleteZone={(zone) => setDeleteConfirm({ type: "zone", id: zone.id, name: zone.name })}
                   onDeleteTable={(id, label) => setDeleteConfirm({ type: "table", id, name: `Table ${label}` })}
                 />
               )}
@@ -353,6 +354,7 @@ function EditPanel({
   onPatchSelected,
   onAddTable,
   onEditZone,
+  onDeleteZone,
   onDeleteTable,
 }: {
   floor: FloorMapFloorAPI;
@@ -363,6 +365,7 @@ function EditPanel({
   onPatchSelected: (patch: Partial<Draft>) => void;
   onAddTable: (zoneId: string) => void;
   onEditZone: (zone: FloorZoneAPI) => void;
+  onDeleteZone: (zone: FloorZoneAPI) => void;
   onDeleteTable: (id: string, label: string) => void;
 }) {
   const zones = floor.zones;
@@ -389,11 +392,18 @@ function EditPanel({
                   <span className="material-symbols-outlined text-[13px]">add</span>
                 </button>
                 <button
-                  title="Edit zone"
+                  title="Rename / edit zone"
                   onClick={() => onEditZone(z)}
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-faint hover:text-primary transition-all"
                 >
                   <span className="material-symbols-outlined text-[13px]">edit</span>
+                </button>
+                <button
+                  title="Delete zone"
+                  onClick={() => onDeleteZone(z)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-faint hover:text-rose-500 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[13px]">delete</span>
                 </button>
               </li>
             ))}
@@ -619,12 +629,26 @@ function AddTableModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const SHAPE_DEFAULT_SEATS: Record<"round" | "square" | "rect", number> = {
+    round: 2,
+    square: 4,
+    rect: 4,
+  };
+
   const [zoneId, setZoneId] = useState(defaultZoneId);
   const [label, setLabel] = useState("");
-  const [seats, setSeats] = useState(2);
   const [shape, setShape] = useState<"round" | "square" | "rect">("rect");
+  const [seats, setSeats] = useState(SHAPE_DEFAULT_SEATS["rect"]);
+  const [seatsManuallyEdited, setSeatsManuallyEdited] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const handleShapeChange = (s: "round" | "square" | "rect") => {
+    setShape(s);
+    if (!seatsManuallyEdited) {
+      setSeats(SHAPE_DEFAULT_SEATS[s]);
+    }
+  };
 
   const submit = async () => {
     if (!label.trim()) { setErr("Label is required."); return; }
@@ -697,7 +721,10 @@ function AddTableModal({
             min={1}
             max={20}
             value={seats.toString()}
-            onChange={(e) => setSeats(Math.max(1, Number(e.target.value)))}
+            onChange={(e) => {
+              setSeatsManuallyEdited(true);
+              setSeats(Math.max(1, Number(e.target.value)));
+            }}
             className="w-full"
           />
         </div>
@@ -711,7 +738,7 @@ function AddTableModal({
             <button
               key={s}
               type="button"
-              onClick={() => setShape(s)}
+              onClick={() => handleShapeChange(s)}
               className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-semibold transition-all ${
                 shape === s
                   ? "border-primary bg-primary/8 text-primary"
