@@ -9,8 +9,8 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
-  type Ref,
   type SelectHTMLAttributes,
+  forwardRef,
   useEffect,
   useRef,
 } from "react";
@@ -69,15 +69,10 @@ export function Button({
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
-export function Input({
-  className = "",
-  leadingIcon,
-  ref,
-  ...rest
-}: InputHTMLAttributes<HTMLInputElement> & {
-  leadingIcon?: string;
-  ref?: Ref<HTMLInputElement>;
-}) {
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { leadingIcon?: string }
+>(function Input({ className = "", leadingIcon, ...rest }, ref) {
   if (leadingIcon) {
     return (
       <div className="relative flex items-center">
@@ -99,7 +94,7 @@ export function Input({
       {...rest}
     />
   );
-}
+});
 
 // ─── Select ──────────────────────────────────────────────────────────────────
 
@@ -375,7 +370,7 @@ export function Modal({
             <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </header>
-        <div className="px-5 py-4 space-y-4 text-sm text-ink-soft">{children}</div>
+        <div className="px-5 py-4 space-y-4 text-sm text-ink-soft overflow-y-auto max-h-[70vh]">{children}</div>
         {footer && (
           <footer className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-line bg-paper-sunken/40 rounded-b-2xl">
             {footer}
