@@ -370,7 +370,7 @@ export function Modal({
             <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </header>
-        <div className="px-5 py-4 space-y-4 text-sm text-ink-soft">{children}</div>
+        <div className="px-5 py-4 space-y-4 text-sm text-ink-soft overflow-y-auto max-h-[70vh]">{children}</div>
         {footer && (
           <footer className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-line bg-paper-sunken/40 rounded-b-2xl">
             {footer}

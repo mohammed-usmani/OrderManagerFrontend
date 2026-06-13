@@ -661,42 +661,52 @@ function AddTableModal({
         </>
       }
     >
-      {err && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-3">{err}</div>}
-      <label className="block mb-3">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Zone</span>
-        <Select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className="w-full mt-1.5">
+      {err && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {err}
+        </div>
+      )}
+
+      {/* Zone */}
+      <div>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint block mb-1.5">Zone</span>
+        <Select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className="w-full">
           {floor.zones.map((z) => (
             <option key={z.id} value={z.id}>{z.name}{z.is_ac ? " (AC)" : ""}</option>
           ))}
         </Select>
-      </label>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <label className="block">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Label</span>
+      </div>
+
+      {/* Label + Seats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint block mb-1.5">Label</span>
           <Input
             autoFocus
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="e.g. 7 or T3"
-            className="w-full mt-1.5"
+            className="w-full"
           />
-        </label>
-        <label className="block">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Seats</span>
+        </div>
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint block mb-1.5">Seats</span>
           <Input
             type="number"
             min={1}
             max={20}
             value={seats.toString()}
             onChange={(e) => setSeats(Math.max(1, Number(e.target.value)))}
-            className="w-full mt-1.5"
+            className="w-full"
           />
-        </label>
+        </div>
       </div>
-      <label className="block">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">Shape</span>
-        <div className="flex gap-2 mt-1.5">
+
+      {/* Shape picker */}
+      <div>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint block mb-1.5">Shape</span>
+        <div className="flex gap-2">
           {(["rect", "square", "round"] as const).map((s) => (
             <button
               key={s}
@@ -715,7 +725,7 @@ function AddTableModal({
             </button>
           ))}
         </div>
-      </label>
+      </div>
     </Modal>
   );
 }
