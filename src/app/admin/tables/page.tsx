@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
+  type FloorAPI,
   type ZoneAPI,
   type ZoneWriteAPI,
   type TableAPI,
@@ -148,6 +149,7 @@ export default function AdminTablesPage() {
 
   const [zones, setZones] = useState<ZoneAPI[]>([]);
   const [tables, setTables] = useState<TableAPI[]>([]);
+  const [floors, setFloors] = useState<FloorAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -192,12 +194,14 @@ export default function AdminTablesPage() {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [z, t] = await Promise.all([
+      const [z, t, f] = await Promise.all([
         api.adminListZones(token),
         api.adminListTables(token),
+        api.adminListFloors(token),
       ]);
       setZones(z);
       setTables(t);
+      setFloors(f);
       setError("");
 
       // Initialise rects from API geometry; assign defaults for missing ones
@@ -828,7 +832,7 @@ export default function AdminTablesPage() {
         {zoneModal && (
           <ZoneModal
             zone={zoneModal === "new" ? null : zoneModal}
-            existingRects={zoneRects}
+            floors={floors}
             token={token ?? ""}
             onClose={() => setZoneModal(null)}
             onSaved={(newZone) => {
@@ -937,28 +941,35 @@ function TablePopover({
 
 function ZoneModal({
   zone,
-  existingRects,
+  floors,
   token,
   onClose,
   onSaved,
 }: {
   zone: ZoneAPI | null;
-  existingRects: ZoneRect[];
+  floors: FloorAPI[];
   token: string;
   onClose: () => void;
   onSaved: (z: ZoneAPI) => void;
 }) {
   const isEdit = zone !== null;
-  const [name, setName]       = useState(zone?.name ?? "");
-  const [isAc, setIsAc]       = useState(zone?.is_ac ?? false);
-  const [order, setOrder]     = useState(zone?.display_order ?? 0);
-  const [active, setActive]   = useState(zone?.active ?? true);
-  const [err, setErr]         = useState("");
-  const [busy, setBusy]       = useState(false);
+  const [name, setName]     = useState(zone?.name ?? "");
+  const [floorId, setFloorId] = useState(zone?.floor_id ?? floors[0]?.id ?? "");
+  const [isAc, setIsAc]     = useState(zone?.is_ac ?? false);
+  const [order, setOrder]   = useState(zone?.display_order ?? 0);
+  const [active, setActive] = useState(zone?.active ?? true);
+  const [err, setErr]       = useState("");
+  const [busy, setBusy]     = useState(false);
 
   const submit = async () => {
     if (!name.trim()) { setErr("Zone name is required."); return; }
-    const body: ZoneWriteAPI = { name: name.trim(), is_ac: isAc, display_order: order, active };
+    const body: ZoneWriteAPI = {
+      name: name.trim(),
+      floor_id: floorId || null,
+      is_ac: isAc,
+      display_order: order,
+      active,
+    };
     setBusy(true);
     setErr("");
     try {
@@ -996,6 +1007,14 @@ function ZoneModal({
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder="e.g. AC Hall, Garden, Rooftop"
         />
+      </Field>
+      <Field label="Floor">
+        <Select value={floorId} onChange={(e) => setFloorId(e.target.value)} className="w-full">
+          {floors.length === 0 && <option value="">No floors — add one first</option>}
+          {floors.map((f) => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+        </Select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Display order">

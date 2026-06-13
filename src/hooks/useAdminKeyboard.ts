@@ -11,6 +11,9 @@
  *   G then M        → go to Menu
  *   G then A        → go to Analytics
  *   G then C        → go to Customers
+ *   G then T        → go to Tables & QR
+ *   G then P        → go to Pricing
+ *   G then R        → go to Delivery areas
  *   ?               → open help overlay (shows all shortcuts)
  *   /               → focus page search input (if present)
  *
@@ -22,7 +25,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type AdminRoute = "dashboard" | "kitchen" | "floor" | "menu" | "analytics" | "customers";
+type AdminRoute =
+  | "dashboard" | "kitchen" | "floor" | "menu" | "analytics"
+  | "customers" | "tables" | "pricing" | "areas";
 
 const GOTO_MAP: Record<string, AdminRoute> = {
   d: "dashboard",
@@ -31,6 +36,9 @@ const GOTO_MAP: Record<string, AdminRoute> = {
   m: "menu",
   a: "analytics",
   c: "customers",
+  t: "tables",
+  p: "pricing",
+  r: "areas",
 };
 
 const ROUTE_MAP: Record<AdminRoute, string> = {
@@ -40,6 +48,9 @@ const ROUTE_MAP: Record<AdminRoute, string> = {
   menu:      "/admin/menu",
   analytics: "/admin/analytics",
   customers: "/admin/customers",
+  tables:    "/admin/tables",
+  pricing:   "/admin/pricing",
+  areas:     "/admin/service-areas",
 };
 
 export function useAdminKeyboard() {

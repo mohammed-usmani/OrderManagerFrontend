@@ -9,8 +9,7 @@ import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Button, Card, CardHeader, Input, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
+import { Button, Card, CardHeader, Input, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
 
 type Filter =
   | "active" | "all" | "confirmed" | "cooking"
@@ -59,6 +58,8 @@ export default function AdminOrdersPage() {
   const [sortKey, setSortKey]   = useState<SortKey>("created_at");
   const [sortDir, setSortDir]   = useState<SortDir>("desc");
   const [focusedIdx, setFocusedIdx] = useState<number>(-1);
+  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(1);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -128,6 +129,17 @@ export default function AdminOrdersPage() {
     return out;
   }, [orders, search, sortKey, sortDir]);
 
+  // Client-side pagination over the filtered/sorted set.
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const paged = useMemo(
+    () => visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [visible, page, PAGE_SIZE],
+  );
+  // Reset to the first page (and clear row focus) whenever the view changes.
+  useEffect(() => { setPage(1); setFocusedIdx(-1); }, [filter, search, sortKey, sortDir]);
+  // If the list shrank under us, keep the page in range.
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
+
   // ── Keyboard navigation J/K on the table ────────────────────────────────
   useEffect(() => {
     const el = document.getElementById("orders-table-region");
@@ -138,7 +150,7 @@ export default function AdminOrdersPage() {
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
         setFocusedIdx((i) => {
-          const next = Math.min(i + 1, visible.length - 1);
+          const next = Math.min(i + 1, paged.length - 1);
           rowRefs.current[next]?.focus();
           return next;
         });
@@ -151,16 +163,16 @@ export default function AdminOrdersPage() {
         });
       } else if ((e.key === "Enter" || e.key === " ") && focusedIdx >= 0) {
         e.preventDefault();
-        const order = visible[focusedIdx];
+        const order = paged[focusedIdx];
         if (order) toggleExpand(order.id);
       } else if (e.key === "x" && focusedIdx >= 0) {
-        const order = visible[focusedIdx];
+        const order = paged[focusedIdx];
         if (order && canAct(order)) toggleOne(order.id);
       }
     };
     el.addEventListener("keydown", handleKey);
     return () => el.removeEventListener("keydown", handleKey);
-  }, [visible, focusedIdx]);
+  }, [paged, focusedIdx]);
 
   const markBusy = (ids: string[], busy: boolean) =>
     setBusyIds((prev) => {
@@ -224,7 +236,6 @@ export default function AdminOrdersPage() {
   return (
     <AppShell title="Kitchen">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Kitchen"
           badge={visible.length}
@@ -335,7 +346,7 @@ export default function AdminOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((order, rowIdx) => {
+                    {paged.map((order, rowIdx) => {
                       const busy       = busyIds.has(order.id);
                       const isSelected = selected.has(order.id);
                       const isExpanded = expanded.has(order.id);
@@ -483,6 +494,7 @@ export default function AdminOrdersPage() {
                   </tbody>
                 </table>
               </div>
+              <Pager page={page} pageSize={PAGE_SIZE} total={visible.length} onPage={setPage} />
             </Card>
           )}
 

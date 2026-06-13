@@ -20,6 +20,9 @@ function buildGroups(isMac: boolean) {
         { keys: ["G", "M"], label: "Go to Menu" },
         { keys: ["G", "A"], label: "Go to Analytics" },
         { keys: ["G", "C"], label: "Go to Customers" },
+        { keys: ["G", "T"], label: "Go to Tables & QR" },
+        { keys: ["G", "P"], label: "Go to Pricing" },
+        { keys: ["G", "R"], label: "Go to Delivery areas" },
       ],
     },
     {

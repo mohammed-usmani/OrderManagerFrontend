@@ -23,7 +23,6 @@ import {
   Toolbar,
   EmptyState,
 } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 import { formatPrice } from "@/lib/brand";
 
 type SortKey = "name" | "price" | "category" | "id";
@@ -238,7 +237,6 @@ export default function AdminMenuPage() {
   return (
     <AppShell title="Menu">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Menu"
           badge={items.length}

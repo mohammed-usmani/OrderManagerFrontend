@@ -12,8 +12,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Button, Card, CardHeader, Input, Modal, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
+import { Button, Card, CardHeader, Input, Modal, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
 import { formatPrice } from "@/lib/brand";
 
 export default function AdminCustomersPage() {
@@ -26,6 +25,8 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<CustomerAPI | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -61,12 +62,17 @@ export default function AdminCustomersPage() {
     return () => clearTimeout(t);
   }, [search, load]);
 
+  // Page over the (server-filtered) customer list; reset when it changes.
+  const paged = customers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    if ((page - 1) * PAGE_SIZE >= customers.length && page > 1) setPage(1);
+  }, [customers, page, PAGE_SIZE]);
+
   if (!isAuthenticated || !user?.is_admin) return null;
 
   return (
     <AppShell title="Customers">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Customers"
           badge={customers.length}
@@ -141,7 +147,7 @@ export default function AdminCustomersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((c) => (
+                    {paged.map((c) => (
                       <tr
                         key={c.id}
                         className="border-b border-line last:border-0 hover:bg-paper-sunken/50 cursor-pointer transition-colors"
@@ -174,6 +180,7 @@ export default function AdminCustomersPage() {
                   </tbody>
                 </table>
               </div>
+              <Pager page={page} pageSize={PAGE_SIZE} total={customers.length} onPage={setPage} />
             </Card>
           )}
         </main>

@@ -200,6 +200,45 @@ export function Toolbar({ children }: { children: ReactNode }) {
   );
 }
 
+// ─── Pager (client-side pagination footer) ───────────────────────────────────
+
+/** Renders nothing when everything fits on one page, so it's safe to drop into
+ *  any list — it only appears once rows exceed the page size. */
+export function Pager({
+  page,
+  pageSize,
+  total,
+  onPage,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (p: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  if (pageCount <= 1) return null;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-line text-xs text-ink-soft">
+      <span className="tabular-nums">
+        {from}–{to} of {total}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <Button size="sm" variant="secondary" icon="chevron_left" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+          Prev
+        </Button>
+        <span className="px-1.5 tabular-nums">
+          {page} / {pageCount}
+        </span>
+        <Button size="sm" variant="secondary" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Metric card (dashboard KPI) ─────────────────────────────────────────────
 
 export function MetricCard({

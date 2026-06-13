@@ -14,7 +14,6 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Card, CardHeader, CardBody, MetricCard } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 
 type Range = "today" | "7d" | "30d" | "90d" | "year" | "all";
 type Gran = "day" | "month" | "year";
@@ -90,7 +89,6 @@ export default function AdminAnalyticsPage() {
   return (
     <AppShell title="Analytics">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Analytics"
           subtitle="Revenue, dine-in vs parcel, zones, peak hours"
@@ -209,6 +207,22 @@ export default function AdminAnalyticsPage() {
                   </CardBody>
                 </Card>
               </div>
+
+              {/* Revenue by floor (dine-in) */}
+              <Card>
+                <CardHeader><p className="font-semibold text-ink text-sm">Revenue by Floor (Dine-in)</p></CardHeader>
+                <CardBody>
+                  <BarList
+                    rows={overview.by_floor.map((f) => ({
+                      label: f.floor,
+                      value: f.revenue,
+                      sub: `${f.orders} order${f.orders === 1 ? "" : "s"}`,
+                    }))}
+                    valueFmt={formatPrice}
+                    emptyText="No dine-in orders yet."
+                  />
+                </CardBody>
+              </Card>
 
               {/* Peak hours */}
               <Card>
