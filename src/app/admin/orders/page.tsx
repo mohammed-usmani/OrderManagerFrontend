@@ -10,7 +10,6 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, CardHeader, Input, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 
 type Filter =
   | "active" | "all" | "confirmed" | "cooking"
@@ -224,7 +223,6 @@ export default function AdminOrdersPage() {
   return (
     <AppShell title="Kitchen">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Kitchen"
           badge={visible.length}

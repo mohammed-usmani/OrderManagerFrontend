@@ -14,7 +14,6 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Card, CardHeader, CardBody, MetricCard } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 
 type Range = "today" | "7d" | "30d" | "90d" | "year" | "all";
 type Gran = "day" | "month" | "year";
@@ -90,7 +89,6 @@ export default function AdminAnalyticsPage() {
   return (
     <AppShell title="Analytics">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Analytics"
           subtitle="Revenue, dine-in vs parcel, zones, peak hours"

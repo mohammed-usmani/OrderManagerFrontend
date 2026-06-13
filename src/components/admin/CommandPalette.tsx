@@ -48,9 +48,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: "menu",           group: "Navigate",      label: "Menu",            description: "Items, categories & pricing",   icon: "restaurant_menu",  shortcut: "G M", action: () => nav("/admin/menu") },
     { id: "analytics",      group: "Navigate",      label: "Analytics",       description: "Revenue & trends",              icon: "monitoring",       shortcut: "G A", action: () => nav("/admin/analytics") },
     { id: "customers",      group: "Navigate",      label: "Customers",       description: "Guest records & history",       icon: "groups",           shortcut: "G C", action: () => nav("/admin/customers") },
-    { id: "tables",         group: "Navigate",      label: "Tables & QR",     description: "Manage tables and QR codes",    icon: "table_restaurant",            action: () => nav("/admin/tables") },
-    { id: "pricing",        group: "Navigate",      label: "Pricing",         description: "Dynamic pricing rules",         icon: "payments",                    action: () => nav("/admin/pricing") },
-    { id: "service-areas",  group: "Navigate",      label: "Delivery Areas",  description: "Service zone configuration",    icon: "pin_drop",                    action: () => nav("/admin/service-areas") },
+    { id: "tables",         group: "Navigate",      label: "Tables & QR",     description: "Manage tables and QR codes",    icon: "table_restaurant", shortcut: "G T", action: () => nav("/admin/tables") },
+    { id: "pricing",        group: "Navigate",      label: "Pricing",         description: "Dynamic pricing rules",         icon: "payments",         shortcut: "G P", action: () => nav("/admin/pricing") },
+    { id: "service-areas",  group: "Navigate",      label: "Delivery Areas",  description: "Service zone configuration",    icon: "pin_drop",         shortcut: "G R", action: () => nav("/admin/service-areas") },
     // Quick actions
     { id: "new-order",      group: "Quick Actions", label: "New order",       description: "Open order creation form",      icon: "add_circle",                  action: () => nav("/admin/orders") },
     { id: "public-home",    group: "Quick Actions", label: "Public site",     description: "Open customer-facing homepage", icon: "open_in_new",                 action: () => nav("/") },

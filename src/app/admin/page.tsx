@@ -8,7 +8,6 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Card, CardHeader, CardBody, MetricCard, Toolbar, EmptyState } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 import { formatPrice } from "@/lib/brand";
 
 type Range = "today" | "7d" | "30d" | "all";
@@ -80,7 +79,6 @@ export default function AdminDashboardPage() {
   return (
     <AppShell title="Dashboard">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Dashboard"
           subtitle={`${RANGE_LABEL[range]} · refreshes every 30s`}

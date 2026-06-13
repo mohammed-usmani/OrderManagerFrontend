@@ -14,7 +14,6 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, CardHeader, CardBody, Modal, EmptyState } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 
 const REFRESH_MS = 10000;
 
@@ -92,7 +91,6 @@ export default function AdminFloorPage() {
   return (
     <AppShell title="Floor">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Floor"
           badge={`${seated}/${allTables.length}`}

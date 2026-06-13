@@ -13,7 +13,6 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, CardHeader, Input, Modal, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
-import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 import { formatPrice } from "@/lib/brand";
 
 export default function AdminCustomersPage() {
@@ -66,7 +65,6 @@ export default function AdminCustomersPage() {
   return (
     <AppShell title="Customers">
       <AdminShell>
-        <AdminKeyboardProvider />
         <PageHeader
           title="Customers"
           badge={customers.length}
