@@ -223,6 +223,20 @@ export const api = {
   adminDeleteTable: (token: string, id: string) =>
     apiFetch<void>(`/tables/${id}`, { method: "DELETE", token }),
   adminFloorMap: (token: string) => apiFetch<FloorZoneAPI[]>("/tables/floor", { token }),
+  adminFloorPlan: (token: string) =>
+    apiFetch<FloorPlanFloorAPI[]>("/tables/floor", { token }),
+  adminBulkUpdateZonePositions: (token: string, body: ZonePositionBulkAPI) =>
+    apiFetch<void>("/zones/positions", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
+  adminBulkUpdateTablePositions: (token: string, body: TablePositionBulkAPI) =>
+    apiFetch<void>("/tables/positions", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
   adminGetTableSession: (token: string, id: string) =>
     apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}`, { token }),
   adminSettleTableSession: (token: string, id: string) =>
@@ -407,6 +421,11 @@ export interface ZoneAPI {
   display_order: number;
   active: boolean;
   created_at: string;
+  /** Top-left corner on the logical canvas (default 1000×640) */
+  pos_x: number | null;
+  pos_y: number | null;
+  width: number | null;
+  height: number | null;
 }
 
 export interface ZoneWriteAPI {
@@ -414,6 +433,32 @@ export interface ZoneWriteAPI {
   is_ac?: boolean;
   display_order?: number;
   active?: boolean;
+  pos_x?: number | null;
+  pos_y?: number | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+/** Payload for PATCH /zones/positions — bulk move/resize zones */
+export interface ZonePositionBulkAPI {
+  zones: {
+    zone_id: string;
+    pos_x: number;
+    pos_y: number;
+    width: number;
+    height: number;
+  }[];
+}
+
+/** Payload for PATCH /tables/positions — bulk move tables, optionally reassign zone */
+export interface TablePositionBulkAPI {
+  tables: {
+    table_id: string;
+    pos_x: number;
+    pos_y: number;
+    shape?: string;
+    zone_id?: string;
+  }[];
 }
 
 export interface TableAPI {
@@ -423,6 +468,7 @@ export interface TableAPI {
   seats: number;
   pos_x: number | null;
   pos_y: number | null;
+  shape: "round" | "square" | "rect" | null;
   qr_token: string;
   status: string;
   active: boolean;
@@ -435,6 +481,7 @@ export interface TableWriteAPI {
   seats?: number;
   pos_x?: number | null;
   pos_y?: number | null;
+  shape?: "round" | "square" | "rect" | null;
   status?: string;
   active?: boolean;
 }
@@ -454,6 +501,7 @@ export interface FloorTableAPI {
   seats: number;
   pos_x: number | null;
   pos_y: number | null;
+  shape: "round" | "square" | "rect" | null;
   qr_token: string;
   status: string;
   active: boolean;
@@ -466,7 +514,21 @@ export interface FloorZoneAPI {
   is_ac: boolean;
   display_order: number;
   active: boolean;
+  /** Zone region top-left and size on the logical 1000×640 canvas */
+  pos_x: number | null;
+  pos_y: number | null;
+  width: number | null;
+  height: number | null;
   tables: FloorTableAPI[];
+}
+
+/** Full floor plan returned by GET /tables/floor */
+export interface FloorPlanFloorAPI {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  zones: FloorZoneAPI[];
 }
 
 export interface TableSessionOrderAPI {
