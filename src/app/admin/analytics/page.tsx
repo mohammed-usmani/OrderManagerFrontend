@@ -13,7 +13,8 @@ import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Card } from "@/components/admin/ui";
+import { Card, CardHeader, CardBody, MetricCard } from "@/components/admin/ui";
+import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 
 type Range = "today" | "7d" | "30d" | "90d" | "year" | "all";
 type Gran = "day" | "month" | "year";
@@ -89,17 +90,20 @@ export default function AdminAnalyticsPage() {
   return (
     <AppShell title="Analytics">
       <AdminShell>
+        <AdminKeyboardProvider />
         <PageHeader
           title="Analytics"
           subtitle="Revenue, dine-in vs parcel, zones, peak hours"
           actions={
-            <div className="flex gap-1">
+            <div className="flex gap-1 p-0.5 bg-paper-sunken rounded-lg border border-line">
               {(Object.keys(RANGE_LABEL) as Range[]).map((r) => (
                 <button
                   key={r}
                   onClick={() => setRange(r)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    range === r ? "bg-primary text-on-primary" : "text-ink-soft hover:bg-paper-sunken"
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    range === r
+                      ? "bg-paper-raised text-ink shadow-sm border border-line"
+                      : "text-ink-soft hover:text-ink"
                   }`}
                 >
                   {RANGE_LABEL[r]}
@@ -117,28 +121,35 @@ export default function AdminAnalyticsPage() {
           )}
 
           {loading && !overview ? (
-            <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[1,2,3,4].map((i) => <div key={i} className="skeleton h-24 rounded-xl" />)}
+              </div>
+              <div className="skeleton h-64 rounded-xl" />
             </div>
           ) : overview ? (
-            <div className={`space-y-4 ${loading ? "opacity-60" : ""}`}>
+            <div className={`space-y-5 ${loading ? "opacity-60 pointer-events-none" : ""}`}>
               {/* KPI row */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <Kpi label="Revenue (incl. charges)" value={formatPrice(overview.revenue_total)} icon="payments" />
-                <Kpi label="Orders" value={String(overview.billable_orders)} sub={`${overview.total_orders} incl. carts`} icon="receipt_long" />
-                <Kpi label="Avg ticket" value={formatPrice(overview.avg_ticket)} icon="sell" />
-                <Kpi
-                  label="Table turnover"
+                <MetricCard label="Revenue (incl.)" value={formatPrice(overview.revenue_total)} icon="payments" accent="success" />
+                <MetricCard label="Billable Orders" value={String(overview.billable_orders)} icon="receipt_long" accent="primary" trendLabel={`${overview.total_orders} total incl. carts`} trend="neutral" />
+                <MetricCard label="Avg Ticket" value={formatPrice(overview.avg_ticket)} icon="sell" accent="warning" />
+                <MetricCard
+                  label="Table Turnover"
                   value={`${overview.table_turnover.toFixed(2)}×`}
-                  sub={`${overview.dine_in_sessions} sittings · ${overview.active_tables} tables`}
                   icon="autorenew"
+                  trendLabel={`${overview.dine_in_sessions} sittings · ${overview.active_tables} tables`}
+                  trend="neutral"
                 />
               </div>
 
               {/* Split + revenue over time */}
               <div className="grid lg:grid-cols-[340px_1fr] gap-4">
-                <Card className="p-4">
-                  <h3 className="font-headline font-semibold text-ink text-sm mb-3">Dine-in vs parcel</h3>
+                <Card>
+                  <CardHeader>
+                    <p className="font-semibold text-ink text-sm">Dine-in vs Parcel</p>
+                  </CardHeader>
+                  <CardBody>
                   {splitTotal > 0 ? (
                     <>
                       <div className="flex h-3 rounded-full overflow-hidden mb-3 bg-paper-sunken">
@@ -151,23 +162,28 @@ export default function AdminAnalyticsPage() {
                   ) : (
                     <p className="text-sm text-ink-soft py-6 text-center">No revenue in this period.</p>
                   )}
+                  </CardBody>
                 </Card>
 
-                <Card className="p-4">
-                  <h3 className="font-headline font-semibold text-ink text-sm mb-3">
-                    Revenue over time · {RANGE_GRAN[range]}
-                  </h3>
+                <Card>
+                  <CardHeader>
+                    <p className="font-semibold text-ink text-sm">Revenue Over Time</p>
+                    <p className="text-xs text-ink-faint capitalize">{RANGE_GRAN[range]}</p>
+                  </CardHeader>
+                  <CardBody>
                   <ColumnChart
                     data={series.map((b) => ({ label: b.bucket, value: b.revenue }))}
                     emptyText="No orders in this period."
                   />
+                  </CardBody>
                 </Card>
               </div>
 
               {/* Top items + zones */}
               <div className="grid lg:grid-cols-2 gap-4">
-                <Card className="p-4">
-                  <h3 className="font-headline font-semibold text-ink text-sm mb-3">Top dishes</h3>
+                <Card>
+                  <CardHeader><p className="font-semibold text-ink text-sm">Top Dishes</p></CardHeader>
+                  <CardBody>
                   <BarList
                     rows={overview.top_items.map((it) => ({
                       label: it.name,
@@ -176,9 +192,11 @@ export default function AdminAnalyticsPage() {
                     }))}
                     unit=" sold"
                   />
+                  </CardBody>
                 </Card>
-                <Card className="p-4">
-                  <h3 className="font-headline font-semibold text-ink text-sm mb-3">Revenue by zone (dine-in)</h3>
+                <Card>
+                  <CardHeader><p className="font-semibold text-ink text-sm">Revenue by Zone (Dine-in)</p></CardHeader>
+                  <CardBody>
                   <BarList
                     rows={overview.by_zone.map((z) => ({
                       label: z.zone,
@@ -188,17 +206,23 @@ export default function AdminAnalyticsPage() {
                     valueFmt={formatPrice}
                     emptyText="No dine-in orders yet."
                   />
+                  </CardBody>
                 </Card>
               </div>
 
               {/* Peak hours */}
-              <Card className="p-4">
-                <h3 className="font-headline font-semibold text-ink text-sm mb-3">Peak hours (IST)</h3>
+              <Card>
+                <CardHeader>
+                  <p className="font-semibold text-ink text-sm">Peak Hours (IST)</p>
+                  <p className="text-xs text-ink-faint">Order volume by hour</p>
+                </CardHeader>
+                <CardBody>
                 <ColumnChart
                   data={hours.map((h) => ({ label: `${h.hour}`, value: h.orders }))}
                   emptyText="No orders in this period."
                   compactLabels
                 />
+                </CardBody>
               </Card>
             </div>
           ) : null}
@@ -208,18 +232,7 @@ export default function AdminAnalyticsPage() {
   );
 }
 
-function Kpi({ label, value, sub, icon }: { label: string; value: string; sub?: string; icon: string }) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-1.5 text-ink-soft mb-1">
-        <span className="material-symbols-outlined text-[16px]">{icon}</span>
-        <span className="text-[11px] font-semibold uppercase tracking-wider">{label}</span>
-      </div>
-      <div className="font-headline font-semibold text-ink text-2xl tabular-nums">{value}</div>
-      {sub && <div className="text-[11px] text-ink-faint mt-0.5">{sub}</div>}
-    </Card>
-  );
-}
+
 
 function SplitRow({
   color,

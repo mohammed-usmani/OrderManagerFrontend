@@ -13,7 +13,8 @@ import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Button, Card, Modal } from "@/components/admin/ui";
+import { Button, Card, CardHeader, CardBody, Modal, EmptyState } from "@/components/admin/ui";
+import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
 
 const REFRESH_MS = 10000;
 
@@ -91,9 +92,11 @@ export default function AdminFloorPage() {
   return (
     <AppShell title="Floor">
       <AdminShell>
+        <AdminKeyboardProvider />
         <PageHeader
           title="Floor"
-          subtitle={`${seated}/${allTables.length} tables seated · auto-refreshes every 10s`}
+          badge={`${seated}/${allTables.length}`}
+          subtitle="Tables seated · auto-refreshes every 10s"
         />
 
         <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-28 md:pb-8 max-w-[1400px] mx-auto w-full">
@@ -114,63 +117,68 @@ export default function AdminFloorPage() {
           )}
 
           {loading && zones.length === 0 ? (
-            <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {[1,2,3,4,5,6].map((i) => <div key={i} className="skeleton h-28 rounded-xl" />)}
             </div>
           ) : zones.length === 0 ? (
-            <Card className="py-16 text-center text-sm text-ink-soft">
-              No zones yet. Add zones and tables under{" "}
-              <button className="text-primary underline" onClick={() => router.push("/admin/tables")}>
-                Tables &amp; QR
-              </button>
-              .
-            </Card>
+            <EmptyState
+              icon="grid_view"
+              title="No zones yet"
+              description="Add zones and tables to see the floor plan."
+              action={
+                <Button variant="primary" icon="add" onClick={() => router.push("/admin/tables")}>
+                  Manage tables
+                </Button>
+              }
+            />
           ) : (
             <div className="space-y-6">
               {zones.map((z) => (
                 <div key={z.id}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h2 className="font-headline font-semibold text-ink text-lg">{z.name}</h2>
+                  <div className="flex items-center gap-3 mb-3">
+                    <h2 className="font-headline font-semibold text-ink text-base">{z.name}</h2>
                     {z.is_ac && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-700 border border-sky-300/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                         <span className="material-symbols-outlined text-[12px]">ac_unit</span>
                         AC
                       </span>
                     )}
+                    <span className="text-[11px] text-ink-faint">
+                      {z.tables.filter((t) => t.session).length}/{z.tables.length} occupied
+                    </span>
                   </div>
                   {z.tables.length === 0 ? (
-                    <Card className="py-6 text-center text-xs text-ink-soft">No tables.</Card>
+                    <p className="text-xs text-ink-faint italic">No tables in this zone.</p>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
                       {z.tables.map((t) => {
                         const v = vibe(t);
                         const inner = (
-                          <Card className={`p-3 h-full ${VIBE_CARD[v]} ${t.session ? "hover:border-primary/50 transition-colors" : ""}`}>
-                            <div className="flex items-center justify-between">
-                              <span className="font-headline font-semibold text-ink text-base">
-                                {t.label}
-                              </span>
-                              <span className={`w-2.5 h-2.5 rounded-full ${VIBE_DOT[v]}`} title={VIBE_LABEL[v]} />
+                          <div className={`rounded-xl border p-4 h-full transition-all ${VIBE_CARD[v]} ${t.session ? "cursor-pointer hover:shadow-sm" : ""}`}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <span className="font-headline font-bold text-ink text-xl leading-none">{t.label}</span>
+                                <div className="text-[11px] text-ink-faint mt-0.5">{t.seats} seats</div>
+                              </div>
+                              <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${VIBE_DOT[v]}`} title={VIBE_LABEL[v]} />
                             </div>
-                            <div className="text-[11px] text-ink-soft mb-1">{t.seats} seats</div>
                             {t.session ? (
-                              <div className="mt-1 space-y-0.5">
+                              <div className="space-y-1">
                                 <div className="flex justify-between text-xs">
-                                  <span className="text-ink-soft">
-                                    {t.session.order_count} order{t.session.order_count === 1 ? "" : "s"}
-                                  </span>
-                                  <span className="font-semibold text-ink tabular-nums">
-                                    {formatPrice(t.session.running_total)}
-                                  </span>
+                                  <span className="text-ink-soft">{t.session.order_count} order{t.session.order_count === 1 ? "" : "s"}</span>
+                                  <span className="font-semibold text-ink tabular-nums">{formatPrice(t.session.running_total)}</span>
                                 </div>
                                 <div className="text-[10px] text-ink-faint">
-                                  seated {minutesSince(t.session.opened_at)} · tap to settle
+                                  {minutesSince(t.session.opened_at)} · tap to settle
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-[11px] text-emerald-600 font-medium mt-1">Available</div>
+                              <div className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Available
+                              </div>
                             )}
-                          </Card>
+                          </div>
                         );
                         return t.session ? (
                           <button

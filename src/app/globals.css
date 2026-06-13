@@ -191,6 +191,21 @@ body::after {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
 @keyframes breathe {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 106, 26, 0.45); }
   50%      { transform: scale(1.04); box-shadow: 0 0 60px 12px rgba(255, 106, 26, 0.35); }
@@ -199,6 +214,11 @@ body::after {
   0%   { transform: translateY(0) scale(1); opacity: 0; }
   15%  { opacity: 0.8; }
   100% { transform: translateY(-90px) scale(0.3); opacity: 0; }
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 106, 26, 0.6); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 106, 26, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 106, 26, 0); }
 }
 /* Voice equalizer bars (the hero "Arjun is speaking" orb). */
 @keyframes eq {
@@ -234,9 +254,60 @@ body::after {
 .reveal { animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .reveal-sm { animation: rise-sm 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-breathe { animation: breathe 3.2s ease-in-out infinite; }
+.animate-slide-up { animation: slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-fade-in { animation: fade-in 0.25s ease both; }
+.animate-shake { animation: shake 0.4s ease both; }
+.animate-pulse-ring { animation: pulse-ring 1.6s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .reveal, .reveal-sm, .animate-breathe { animation: none !important; }
+  .reveal, .reveal-sm, .animate-breathe, .animate-slide-up,
+  .animate-fade-in, .animate-shake { animation: none !important; }
+}
+
+/* ---------------- Admin utility classes ---------------- */
+
+/* Keyboard shortcut badge */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1em 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-ink-soft);
+  background: var(--color-paper-sunken);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--color-line-strong);
+  white-space: nowrap;
+}
+
+/* Row keyboard focus indicator for admin tables */
+.admin-row-focus {
+  outline: none;
+}
+.admin-row-focus:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* Admin sidebar active left-bar indicator */
+.admin-nav-active {
+  position: relative;
+}
+.admin-nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--color-primary);
+  border-radius: 0 2px 2px 0;
 }
 
 /* Skeleton shimmer for loading states. */

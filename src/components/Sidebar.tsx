@@ -7,26 +7,24 @@ interface NavItem {
   href: string;
   icon: string;
   label: string;
+  shortcut?: string; // keyboard shortcut hint shown on hover
 }
 
-// The ordering line is public (anonymous parcel callers). Customers only need
-// the landing + the voice mic — no accounts. Admins get the back-office nav.
 const PUBLIC_NAV: NavItem[] = [
   { href: "/", icon: "home", label: "Home" },
   { href: "/chat", icon: "mic", label: "Order" },
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { href: "/admin", icon: "dashboard", label: "Dashboard" },
-  { href: "/admin/analytics", icon: "monitoring", label: "Analytics" },
-  { href: "/admin/orders", icon: "soup_kitchen", label: "Kitchen" },
-  { href: "/admin/floor", icon: "grid_view", label: "Floor" },
-  { href: "/admin/tables", icon: "table_restaurant", label: "Tables & QR" },
-  { href: "/admin/menu", icon: "restaurant_menu", label: "Menu" },
-  { href: "/admin/pricing", icon: "payments", label: "Pricing" },
-  { href: "/admin/customers", icon: "groups", label: "Customers" },
-  { href: "/admin/service-areas", icon: "pin_drop", label: "Delivery areas" },
-  { href: "/profile", icon: "person", label: "Profile" },
+  { href: "/admin",             icon: "dashboard",       label: "Dashboard",     shortcut: "G D" },
+  { href: "/admin/analytics",   icon: "monitoring",      label: "Analytics",     shortcut: "G A" },
+  { href: "/admin/orders",      icon: "soup_kitchen",    label: "Kitchen",       shortcut: "G K" },
+  { href: "/admin/floor",       icon: "grid_view",       label: "Floor",         shortcut: "G F" },
+  { href: "/admin/tables",      icon: "table_restaurant",label: "Tables & QR" },
+  { href: "/admin/menu",        icon: "restaurant_menu", label: "Menu",          shortcut: "G M" },
+  { href: "/admin/pricing",     icon: "payments",        label: "Pricing" },
+  { href: "/admin/customers",   icon: "groups",          label: "Customers",     shortcut: "G C" },
+  { href: "/admin/service-areas", icon: "pin_drop",      label: "Delivery Areas" },
 ];
 
 /** Most-specific-prefix wins. Prevents parent routes (like /admin) from
@@ -34,8 +32,7 @@ const ADMIN_NAV: NavItem[] = [
 function activeHref(pathname: string, items: readonly NavItem[]): string | null {
   let best: string | null = null;
   for (const { href } of items) {
-    const matches =
-      pathname === href || pathname.startsWith(href + "/");
+    const matches = pathname === href || pathname.startsWith(href + "/");
     if (matches && (best === null || href.length > best.length)) {
       best = href;
     }
@@ -47,10 +44,12 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const visibleItems = user?.is_admin ? ADMIN_NAV : PUBLIC_NAV;
+  const isAdmin = Boolean(user?.is_admin);
+  const visibleItems = isAdmin ? ADMIN_NAV : PUBLIC_NAV;
   const activeRoute = activeHref(pathname, visibleItems);
 
   const initials = user ? user.email.slice(0, 2).toUpperCase() : "??";
+  const username = user?.email.split("@")[0] ?? "";
 
   const handleLogout = () => {
     logout();
@@ -58,78 +57,85 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="hidden md:flex flex-col w-64 h-dvh fixed left-0 top-0 z-50 bg-surface-container/80 backdrop-blur-2xl border-r border-white/5">
+    <aside className="hidden md:flex flex-col w-64 h-dvh fixed left-0 top-0 z-50 bg-surface-container/90 backdrop-blur-2xl border-r border-white/[0.06]">
       {/* Brand */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-white/5">
-        <span className="material-symbols-outlined text-primary text-2xl">
-          restaurant
-        </span>
-        <h1 className="font-headline tracking-tight font-extrabold text-lg text-white">
-          Saffron & Smoke
-        </h1>
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.06]">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-primary text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+            local_fire_department
+          </span>
+        </div>
+        <div>
+          <h1 className="font-headline font-bold text-[15px] text-white leading-none tracking-tight">
+            Saffron &amp; Smoke
+          </h1>
+          {isAdmin && (
+            <p className="text-[10px] text-on-surface-variant/60 mt-0.5 font-mono uppercase tracking-widest">
+              Admin Panel
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 flex flex-col gap-1 px-3 py-4">
-        {visibleItems.map(({ href, icon, label }) => {
+      <nav className="flex-1 flex flex-col gap-0.5 px-2 py-3 overflow-y-auto">
+        {visibleItems.map(({ href, icon, label, shortcut }) => {
           const isActive = href === activeRoute;
           return (
             <button
               key={href}
               onClick={() => router.push(href)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-primary/10 text-primary font-bold"
-                  : "text-on-surface-variant hover:text-white hover:bg-white/5"
-              }`}
+              title={label}
+              className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left w-full
+                ${isActive
+                  ? "admin-nav-active bg-white/[0.07] text-white"
+                  : "text-on-surface-variant hover:text-white hover:bg-white/[0.04]"
+                }`}
             >
               <span
-                className="material-symbols-outlined text-[20px]"
-                style={
-                  isActive
-                    ? { fontVariationSettings: "'FILL' 1" }
-                    : undefined
-                }
+                className={`material-symbols-outlined text-[20px] shrink-0 transition-colors ${isActive ? "text-primary" : "text-on-surface-variant group-hover:text-white"}`}
+                style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
               >
                 {icon}
               </span>
-              {label}
+              <span className="flex-1 truncate">{label}</span>
+              {shortcut && (
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+                  <kbd>{shortcut}</kbd>
+                </span>
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Footer — staff identity when logged in, otherwise a quiet staff door */}
-      <div className="border-t border-white/5 px-4 py-4 space-y-3">
+      {/* Footer */}
+      <div className="border-t border-white/[0.06] px-3 py-3">
         {user ? (
-          <>
-            <div className="flex items-center gap-3 px-2">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
-                <span className="font-headline font-bold text-xs text-primary">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/[0.04] transition-colors">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/25 to-secondary/25 border border-primary/20 flex items-center justify-center shrink-0">
+                <span className="font-headline font-bold text-[11px] text-primary">
                   {initials}
                 </span>
               </div>
-              <div className="min-w-0">
-                <p className="text-on-surface text-sm font-medium truncate">
-                  {user.email.split("@")[0]}
-                </p>
-                <p className="text-on-surface-variant text-[11px] truncate">
-                  {user.email}
-                </p>
+              <div className="min-w-0 flex-1">
+                <p className="text-on-surface text-sm font-medium truncate leading-none">{username}</p>
+                <p className="text-on-surface-variant text-[11px] truncate mt-0.5 opacity-60">{user.email}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-error/80 text-xs font-bold hover:bg-error/5 transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-error/70 text-xs font-semibold hover:bg-error/8 hover:text-error transition-colors"
             >
               <span className="material-symbols-outlined text-[16px]">logout</span>
-              Sign Out
+              Sign out
             </button>
-          </>
+          </div>
         ) : (
           <button
             onClick={() => router.push("/auth/signin")}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-on-surface-variant text-xs font-semibold hover:text-on-surface hover:bg-white/5 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant text-xs font-semibold hover:text-white hover:bg-white/[0.05] transition-colors"
           >
             <span className="material-symbols-outlined text-[16px]">lock</span>
             Staff sign in
