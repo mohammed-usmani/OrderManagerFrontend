@@ -133,9 +133,20 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; lab
   inactive:         { bg: "bg-paper-sunken",         text: "text-ink-faint",        dot: "bg-ink-faint" },
 };
 
+const UNKNOWN_STATUS_CONFIG = {
+  bg: "bg-paper-sunken",
+  text: "text-ink-faint",
+  dot: "border border-ink-faint/60 bg-transparent",
+};
+
 export function StatusChip({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.cart;
-  const display = cfg.label ?? status.replace(/_/g, " ");
+  const known = status in STATUS_CONFIG;
+  if (!known && process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.warn(`[StatusChip] unmapped status: "${status}"`);
+  }
+  const cfg = known ? STATUS_CONFIG[status] : UNKNOWN_STATUS_CONFIG;
+  const display = (known ? STATUS_CONFIG[status].label : undefined) ?? status.replace(/_/g, " ");
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}
@@ -309,31 +320,65 @@ export function Modal({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Focus trap + Escape key
+  // Focus trap + Escape key + body scroll lock + focus restore
   useEffect(() => {
     if (!open) return;
     const el = dialogRef.current;
     if (!el) return;
 
-    const focusable = el.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    const first = focusable[0];
-    const last  = focusable[focusable.length - 1];
-    first?.focus();
+    // Save the element that had focus before the modal opened so we can
+    // restore it on close (prevents focus from vanishing to <body>).
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    // Lock background scroll while any modal is open.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    // Only include focusable nodes that are visible and not disabled.
+    const getFocusable = () =>
+      Array.from(
+        el.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href]:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((node) => {
+        if ((node as HTMLInputElement).disabled) return false;
+        if (node.hidden) return false;
+        // Skip zero-size nodes (aria-hidden siblings etc.)
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 || rect.height > 0;
+      });
+
+    // Focus first focusable element in the modal.
+    const focusableNow = getFocusable();
+    (focusableNow[0] ?? el).focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
       if (e.key === "Tab") {
+        const nodes = getFocusable();
+        const first = nodes[0];
+        const last  = nodes[nodes.length - 1];
         if (e.shiftKey) {
-          if (document.activeElement === first) { e.preventDefault(); last?.focus(); }
+          if (document.activeElement === first || document.activeElement === el) {
+            e.preventDefault();
+            last?.focus();
+          }
         } else {
-          if (document.activeElement === last) { e.preventDefault(); first?.focus(); }
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first?.focus();
+          }
         }
       }
     };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = prevOverflow;
+      // Restore focus to the element that opened the modal.
+      previouslyFocused?.focus();
+    };
   }, [open, onClose]);
 
   if (!open) return null;

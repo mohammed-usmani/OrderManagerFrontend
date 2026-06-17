@@ -103,10 +103,13 @@ function decodeVarint(
   let pos = offset;
   while (pos < data.length) {
     const byte = data[pos];
-    result |= (byte & 0x7f) << shift;
+    // Use multiplication instead of bit-shift so the accumulation stays
+    // unsigned and doesn't sign-flip when shift >= 28 (the 5th byte).
+    result += (byte & 0x7f) * Math.pow(2, shift);
     pos++;
     if ((byte & 0x80) === 0) break;
     shift += 7;
+    if (shift > 35) break; // guard against malformed/overlong varints
   }
   return [result, pos];
 }
@@ -130,9 +133,15 @@ function decodeField(
     const [length, lenEnd] = decodeVarint(data, tagEnd);
     const value = data.slice(lenEnd, lenEnd + length);
     return { fieldNumber, wireType, value, nextOffset: lenEnd + length };
+  } else if (wireType === 1) {
+    // 64-bit fixed — skip 8 bytes and return a sentinel so callers continue.
+    return { fieldNumber, wireType, value: 0, nextOffset: tagEnd + 8 };
+  } else if (wireType === 5) {
+    // 32-bit fixed — skip 4 bytes and return a sentinel so callers continue.
+    return { fieldNumber, wireType, value: 0, nextOffset: tagEnd + 4 };
   }
 
-  // Skip unknown wire types
+  // Truly unknown wire type — cannot determine length; abort frame parse.
   return null;
 }
 

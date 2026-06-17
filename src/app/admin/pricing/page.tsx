@@ -78,7 +78,8 @@ export default function AdminPricingPage() {
   const addRow = () =>
     setCharges((prev) => [
       ...prev,
-      { key: `charge_${prev.length + 1}`, label: "New charge", rate: 0.05, applies_to: "all", ac_only: false },
+      // Use a timestamp+random suffix to guarantee uniqueness even after deletes.
+      { key: `charge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, label: "New charge", rate: 0.05, applies_to: "all", ac_only: false },
     ]);
 
   const save = async () => {
@@ -156,7 +157,7 @@ export default function AdminPricingPage() {
                     </thead>
                     <tbody>
                       {charges.map((c, i) => (
-                        <tr key={i} className="border-b border-line">
+                        <tr key={c.key} className="border-b border-line">
                           <td className="px-3 py-2">
                             <Input
                               value={c.label}
@@ -170,19 +171,23 @@ export default function AdminPricingPage() {
                               min={0}
                               max={99}
                               step={0.5}
-                              value={(c.rate * 100).toString()}
-                              onChange={(e) =>
-                                update(i, { rate: Math.max(0, Number(e.target.value) / 100) })
-                              }
+                              // Round to avoid float artifacts like 5.000000000001
+                              value={String(Math.round(c.rate * 1000) / 10)}
+                              onChange={(e) => {
+                                const n = Number(e.target.value);
+                                update(i, { rate: Number.isFinite(n) ? Math.max(0, Math.round(n * 10) / 1000) : c.rate });
+                              }}
                               className="w-20 tabular-nums"
                             />
                           </td>
                           <td className="px-3 py-2">
                             <Select
                               value={c.applies_to}
-                              onChange={(e) =>
-                                update(i, { applies_to: e.target.value as ChargeRuleAPI["applies_to"] })
-                              }
+                              onChange={(e) => {
+                                const applies_to = e.target.value as ChargeRuleAPI["applies_to"];
+                                // ac_only is only meaningful for dine_in; clear it otherwise.
+                                update(i, { applies_to, ...(applies_to !== "dine_in" ? { ac_only: false } : {}) });
+                              }}
                               className="w-full"
                             >
                               {APPLIES_TO.map((a) => (

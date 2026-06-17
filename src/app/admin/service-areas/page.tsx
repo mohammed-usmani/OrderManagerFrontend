@@ -19,6 +19,7 @@ export default function AdminServiceAreasPage() {
   const [editing, setEditing] = useState<ServiceAreaAPI | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<ServiceAreaAPI | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -66,7 +67,6 @@ export default function AdminServiceAreasPage() {
 
   const remove = async (a: ServiceAreaAPI) => {
     if (!token) return;
-    if (!confirm(`Remove "${a.name}" from the delivery area?`)) return;
     markBusy(a.id, true);
     try {
       await api.adminDeleteServiceArea(token, a.id);
@@ -75,6 +75,7 @@ export default function AdminServiceAreasPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       markBusy(a.id, false);
+      setDeleteTarget(null);
     }
   };
 
@@ -146,7 +147,7 @@ export default function AdminServiceAreasPage() {
                             <Button size="sm" variant="secondary" onClick={() => toggleActive(a)} disabled={busy}>
                               {a.active ? "Disable" : "Enable"}
                             </Button>
-                            <Button size="sm" variant="danger" onClick={() => remove(a)} disabled={busy}>
+                            <Button size="sm" variant="danger" onClick={() => setDeleteTarget(a)} disabled={busy}>
                               Delete
                             </Button>
                           </td>
@@ -188,6 +189,25 @@ export default function AdminServiceAreasPage() {
               load();
             }}
           />
+        )}
+        {deleteTarget && (
+          <Modal
+            open={!!deleteTarget}
+            title="Remove delivery area"
+            onClose={() => setDeleteTarget(null)}
+            footer={
+              <div className="flex gap-2 justify-end">
+                <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+                <Button variant="danger" onClick={() => remove(deleteTarget)} disabled={busyIds.has(deleteTarget.id)}>
+                  {busyIds.has(deleteTarget.id) ? "Removing…" : "Remove"}
+                </Button>
+              </div>
+            }
+          >
+            <p className="text-sm text-ink-soft">
+              Remove <span className="font-semibold text-ink">{deleteTarget.name}</span> from the delivery area? This cannot be undone.
+            </p>
+          </Modal>
         )}
       </AdminShell>
     </AppShell>

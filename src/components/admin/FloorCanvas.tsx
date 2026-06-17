@@ -63,15 +63,21 @@ export function FloorCanvas({
   const ref = useRef<HTMLDivElement>(null);
   const dragId = useRef<string | null>(null);
 
-  const toLogical = (clientX: number, clientY: number) => {
+  const toLogical = (clientX: number, clientY: number, boxW = 0, boxH = 0) => {
     const el = ref.current;
     if (!el) return null;
     const r = el.getBoundingClientRect();
     const x = ((clientX - r.left) / r.width) * width;
     const y = ((clientY - r.top) / r.height) * height;
-    const clamp = (v: number, max: number) => Math.max(0, Math.min(max, v));
+    // Clamp so the table box never overflows the canvas edges (half-box inset).
+    const halfW = (boxW / r.width) * width * 0.5;
+    const halfH = (boxH / r.height) * height * 0.5;
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
     const snap = (v: number) => Math.round(v / SNAP) * SNAP;
-    return { x: snap(clamp(x, width)), y: snap(clamp(y, height)) };
+    return {
+      x: snap(clamp(x, halfW, width - halfW)),
+      y: snap(clamp(y, halfH, height - halfH)),
+    };
   };
 
   const onPointerDown = (e: React.PointerEvent, t: CanvasTable) => {
@@ -83,7 +89,9 @@ export function FloorCanvas({
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (mode !== "edit" || dragId.current === null) return;
-    const p = toLogical(e.clientX, e.clientY);
+    const dragged = tables.find((t) => t.id === dragId.current);
+    const box = dragged ? shapeBox(dragged.shape) : { w: 60, h: 60 };
+    const p = toLogical(e.clientX, e.clientY, box.w, box.h);
     if (p) onMove?.(dragId.current, p.x, p.y);
   };
   const endDrag = (e: React.PointerEvent) => {
@@ -98,6 +106,7 @@ export function FloorCanvas({
       ref={ref}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
+      onPointerCancel={endDrag}
       className="relative w-full rounded-xl border border-line bg-paper-sunken/40 overflow-hidden select-none"
       style={{
         aspectRatio: `${width} / ${height}`,
@@ -149,7 +158,7 @@ export function FloorCanvas({
               {t.seats}p
             </span>
             {mode === "live" && t.hasSession && t.sessionTotal != null && (
-              <span className="text-[8px] leading-none mt-0.5 text-white/90 font-semibold tabular-nums">
+              <span className={`text-[8px] leading-none mt-0.5 font-semibold tabular-nums ${dark ? "text-white/90" : "text-ink"}`}>
                 ₹{Math.round(t.sessionTotal)}
               </span>
             )}

@@ -58,18 +58,26 @@ export default function AdminAnalyticsPage() {
 
   const load = useCallback(async () => {
     if (!token) return;
+    // Capture the range at call time; ignore stale responses if the user
+    // switched ranges while the request was in-flight.
+    const requestedRange = range;
     setLoading(true);
     try {
-      const gran = RANGE_GRAN[range];
+      const gran = RANGE_GRAN[requestedRange];
       const [o, s, h] = await Promise.all([
-        api.adminAnalyticsOverview(token, range),
-        api.adminAnalyticsTimeseries(token, range, gran),
-        api.adminAnalyticsPeakHours(token, range),
+        api.adminAnalyticsOverview(token, requestedRange),
+        api.adminAnalyticsTimeseries(token, requestedRange, gran),
+        api.adminAnalyticsPeakHours(token, requestedRange),
       ]);
-      setOverview(o);
-      setSeries(s);
-      setHours(h);
-      setError("");
+      // Only commit if the user has not switched to another range in the meantime.
+      setRange((currentRange) => {
+        if (currentRange !== requestedRange) return currentRange; // stale — discard
+        setOverview(o);
+        setSeries(s);
+        setHours(h);
+        setError("");
+        return currentRange;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -126,7 +134,13 @@ export default function AdminAnalyticsPage() {
               <div className="skeleton h-64 rounded-xl" />
             </div>
           ) : overview ? (
-            <div className={`space-y-5 ${loading ? "opacity-60 pointer-events-none" : ""}`}>
+            <div className="space-y-5 relative">
+              {/* Overlay a small spinner when re-fetching so previous data stays visible */}
+              {loading && (
+                <div className="absolute top-0 right-0 z-10">
+                  <div className="w-4 h-4 border-2 border-line-strong border-t-primary rounded-full animate-spin" title="Refreshing…" />
+                </div>
+              )}
               {/* KPI row */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <MetricCard label="Revenue (incl.)" value={formatPrice(overview.revenue_total)} icon="payments" accent="success" />
@@ -170,7 +184,7 @@ export default function AdminAnalyticsPage() {
                   </CardHeader>
                   <CardBody>
                   <ColumnChart
-                    data={series.map((b) => ({ label: b.bucket, value: b.revenue }))}
+                    data={series.map((b) => ({ label: formatBucketLabel(b.bucket, RANGE_GRAN[range]), value: b.revenue }))}
                     emptyText="No orders in this period."
                   />
                   </CardBody>
@@ -232,7 +246,7 @@ export default function AdminAnalyticsPage() {
                 </CardHeader>
                 <CardBody>
                 <ColumnChart
-                  data={hours.map((h) => ({ label: `${h.hour}`, value: h.orders }))}
+                  data={hours.map((h) => ({ label: formatHourLabel(h.hour), value: h.orders }))}
                   emptyText="No orders in this period."
                   compactLabels
                 />
@@ -247,6 +261,36 @@ export default function AdminAnalyticsPage() {
 }
 
 
+
+/**
+ * Format a time-series bucket label depending on granularity.
+ *  day   "2026-06-07"    → "Jun 7"
+ *  month "2026-06"       → "Jun"
+ *  year  "2026"          → "2026"
+ */
+function formatBucketLabel(bucket: string, gran: Gran): string {
+  try {
+    if (gran === "year") return bucket.slice(0, 4);
+    if (gran === "month") {
+      const [y, m] = bucket.split("-");
+      const d = new Date(Number(y), Number(m) - 1, 1);
+      return d.toLocaleDateString(undefined, { month: "short" });
+    }
+    // day — "2026-06-07"
+    const [y, m, day] = bucket.split("-");
+    const d = new Date(Number(y), Number(m) - 1, Number(day));
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return bucket;
+  }
+}
+
+/** Format a 0-23 hour integer as e.g. "9a", "12p", "6p". */
+function formatHourLabel(hour: number): string {
+  if (hour === 0) return "12a";
+  if (hour === 12) return "12p";
+  return hour < 12 ? `${hour}a` : `${hour - 12}p`;
+}
 
 function SplitRow({
   color,
@@ -331,7 +375,7 @@ function ColumnChart({
             />
           </div>
           <span className="text-[9px] text-ink-faint tabular-nums truncate w-full text-center">
-            {compactLabels ? (i % 3 === 0 ? d.label : "") : d.label.slice(5) || d.label}
+            {compactLabels ? (i % 3 === 0 ? d.label : "") : d.label}
           </span>
         </div>
       ))}
