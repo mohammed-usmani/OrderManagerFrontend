@@ -161,19 +161,26 @@ export default function AdminMenuPage() {
       const ids = Array.from(selected);
       markBusy(ids, true);
       try {
-        await Promise.all(
+        const results = await Promise.allSettled(
           ids.map((id) =>
             available
               ? api.adminUpdateMenuItem(token, id, { available: true })
               : api.adminDisableMenuItem(token, id)
           )
         );
-        setSelected(new Set());
-        await load();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        const failed = results.filter((r) => r.status === "rejected").length;
+        const succeeded = results.length - failed;
+        // Keep failed ids selected so the user can retry them.
+        const successIds = new Set(ids.filter((_, i) => results[i].status === "fulfilled"));
+        setSelected((prev) => {
+          const next = new Set(prev);
+          successIds.forEach((id) => next.delete(id));
+          return next;
+        });
+        if (failed > 0) setError(`Updated ${succeeded} of ${ids.length}; ${failed} failed.`);
       } finally {
         markBusy(ids, false);
+        await load();
       }
     },
     [token, selected, load]

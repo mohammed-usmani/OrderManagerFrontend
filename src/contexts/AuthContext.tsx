@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { API_URL, onUnauthorized } from "@/lib/api";
 
 export interface AuthUser {
   id: string;
@@ -19,11 +20,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8765";
-
 function decodeJwt(token: string): AuthUser | null {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    // base64url → base64 → JSON
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(new TextDecoder().decode(
+      Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    ));
+    // Reject expired tokens immediately
+    if (payload.exp && payload.exp * 1000 <= Date.now()) return null;
     return {
       id: payload.sub,
       email: payload.email,
@@ -38,6 +43,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
+  const logoutRef = useRef<() => void>(() => {});
+
+  // Keep logoutRef in sync so the 401 handler always calls the latest logout.
+  useEffect(() => {
+    logoutRef.current = () => {
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem("oracle_token");
+    };
+    const handler = () => logoutRef.current();
+    onUnauthorized.push(handler);
+    return () => {
+      const idx = onUnauthorized.indexOf(handler);
+      if (idx >= 0) onUnauthorized.splice(idx, 1);
+    };
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem("oracle_token");

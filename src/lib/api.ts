@@ -1,4 +1,7 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** Fired when any apiFetch call receives a 401 — components can subscribe to force-logout. */
+export const onUnauthorized: Array<() => void> = [];
 
 export async function apiFetch<T>(
   path: string,
@@ -17,6 +20,13 @@ export async function apiFetch<T>(
   }
 
   const res = await fetch(`${API_URL}${path}`, { ...rest, headers });
+
+  // Expired / invalid token — notify subscribers so they can clear auth state.
+  if (res.status === 401) {
+    onUnauthorized.forEach((fn) => fn());
+    throw new Error("Session expired. Please sign in again.");
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `HTTP ${res.status}`);
@@ -27,7 +37,11 @@ export async function apiFetch<T>(
   }
   const text = await res.text();
   if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Unexpected response from server (HTTP ${res.status})`);
+  }
 }
 
 export interface MenuItemAPI {

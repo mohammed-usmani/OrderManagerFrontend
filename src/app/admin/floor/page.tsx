@@ -107,13 +107,22 @@ export default function AdminFloorPage() {
     if (!token) return;
     setSaving(true);
     try {
-      const updates = Object.entries(draft)
-        .filter(([, d]) => d.pos_x !== null && d.pos_y !== null)
-        .map(([table_id, d]) => ({ table_id, pos_x: d.pos_x, pos_y: d.pos_y, shape: d.shape, zone_id: d.zone_id }));
+      // Include ALL draft entries — placed ones send pos_x/pos_y, unplaced ones
+      // still persist shape and zone_id changes without moving them on the canvas.
+      const updates = Object.entries(draft).map(([table_id, d]) => ({
+        table_id,
+        shape: d.shape ?? "rect",
+        zone_id: d.zone_id,
+        ...(d.pos_x !== null && d.pos_y !== null
+          ? { pos_x: d.pos_x, pos_y: d.pos_y }
+          : {}),
+      }));
       await api.adminSaveTablePositions(token, updates);
+      // Stay in saving state until load() finishes so the polling interval
+      // cannot fire between the save response and the data refresh.
+      await load();
       setEditing(false);
       setSelectedId(null);
-      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -175,8 +184,10 @@ export default function AdminFloorPage() {
                   variant="ghost"
                   icon="table_restaurant"
                   onClick={() => {
-                    const firstZone = activeFloor?.zones[0];
-                    if (firstZone) setAddTableZoneId(firstZone.id);
+                    // Prefer the selected table's zone, fall back to first zone.
+                    const zoneId = (selectedId && draft[selectedId]?.zone_id)
+                      || activeFloor?.zones[0]?.id;
+                    if (zoneId) setAddTableZoneId(zoneId);
                   }}
                   disabled={!activeFloor?.zones.length}
                 >
@@ -209,6 +220,7 @@ export default function AdminFloorPage() {
                   key={f.id ?? "unassigned"}
                   onClick={() => { if (!editing) setActiveId(f.id); }}
                   disabled={editing && f.id !== activeId}
+                  title={editing && f.id !== activeId ? "Save or cancel before switching floors" : undefined}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     f.id === activeFloor?.id ? "bg-primary text-on-primary" : "text-ink-soft hover:bg-paper-sunken"
                   } ${editing && f.id !== activeId ? "opacity-40 cursor-not-allowed" : ""}`}

@@ -137,6 +137,15 @@ export default function AdminOrdersPage() {
   );
   // Reset to the first page (and clear row focus) whenever the view changes.
   useEffect(() => { setPage(1); setFocusedIdx(-1); }, [filter, search, sortKey, sortDir]);
+  // Prune selection to only ids still in the visible set after filter/search changes.
+  useEffect(() => {
+    if (selected.size === 0) return;
+    const visibleIds = new Set(visible.map((o) => o.id));
+    setSelected((prev) => {
+      const pruned = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return pruned.size === prev.size ? prev : pruned;
+    });
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
   // If the list shrank under us, keep the page in range.
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
@@ -147,6 +156,11 @@ export default function AdminOrdersPage() {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
         setFocusedIdx((i) => {
@@ -199,21 +213,33 @@ export default function AdminOrdersPage() {
 
   const bulkCancel = useCallback(async () => {
     if (!token || selected.size === 0) return;
+    // Resolve against visible (filtered) list, not the full orders array.
     const ids = Array.from(selected).filter((id) =>
-      orders.find((o) => o.id === id)?.next_statuses.includes("cancelled")
+      visible.find((o) => o.id === id)?.next_statuses.includes("cancelled")
     );
     if (ids.length === 0) return;
     markBusy(ids, true);
     try {
-      await Promise.all(ids.map((id) => api.adminUpdateOrderStatus(token, id, "cancelled")));
-      setSelected(new Set());
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const results = await Promise.allSettled(
+        ids.map((id) => api.adminUpdateOrderStatus(token, id, "cancelled"))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const succeeded = results.length - failed;
+      // Remove only the successfully cancelled ids from selection.
+      const successIds = new Set(
+        ids.filter((_, i) => results[i].status === "fulfilled")
+      );
+      setSelected((prev) => {
+        const next = new Set(prev);
+        successIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (failed > 0) setError(`Cancelled ${succeeded} of ${ids.length}; ${failed} could not be cancelled.`);
     } finally {
       markBusy(ids, false);
+      await load();
     }
-  }, [token, selected, orders, load]);
+  }, [token, selected, visible, load]);
 
   const canAct = (o: AdminOrderAPI) => o.next_statuses.length > 0;
   const actionable = visible.filter(canAct);
