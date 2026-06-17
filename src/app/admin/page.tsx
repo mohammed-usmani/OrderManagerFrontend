@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type AnalyticsSummaryAPI } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
@@ -41,29 +40,27 @@ const DOT: Record<string, string> = {
 const REFRESH_MS = 30000;
 
 export default function AdminDashboardPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [range, setRange] = useState<Range>("today");
   const [summary, setSummary] = useState<AnalyticsSummaryAPI | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!isAuthenticated) { router.replace("/auth/signin"); return; }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
-
+  const reqRef = useRef(0);
   const load = useCallback(async () => {
     if (!token) return;
+    const reqId = ++reqRef.current;
     try {
       const data = await api.adminAnalyticsSummary(token, range);
+      if (reqRef.current !== reqId) return; // stale response, discard
       setSummary(data);
       setError("");
     } catch (e) {
+      if (reqRef.current !== reqId) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (reqRef.current === reqId) setLoading(false);
     }
   }, [token, range]);
 
@@ -73,8 +70,6 @@ export default function AdminDashboardPage() {
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [load]);
-
-  if (!isAuthenticated || !user?.is_admin) return null;
 
   return (
     <AppShell title="Dashboard">

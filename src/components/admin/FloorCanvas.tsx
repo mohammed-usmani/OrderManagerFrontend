@@ -11,17 +11,18 @@
  */
 
 import { useRef } from "react";
+import type { TableShape, TableStatus } from "@/lib/api";
 
 export interface CanvasTable {
   id: string;
   label: string;
   seats: number;
-  shape: string; // round | square | rect
+  shape: TableShape;
   pos_x: number;
   pos_y: number;
   zoneName: string;
   zoneColor: string; // tailwind-ish hex for edit mode
-  status: string; // free | occupied | needs_bill | cleaning
+  status: TableStatus | string; // live status; tolerant of unknown values
   hasSession: boolean;
   sessionTotal?: number;
 }

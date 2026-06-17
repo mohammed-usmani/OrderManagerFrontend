@@ -21,47 +21,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ADMIN_GOTO } from "@/lib/adminRoutes";
 
 type Overlay = "palette" | "help" | null;
-
-type AdminRoute =
-  | "dashboard" | "kitchen" | "floor" | "menu" | "analytics"
-  | "customers" | "tables" | "pricing" | "areas";
-
-const GOTO_MAP: Record<string, AdminRoute> = {
-  d: "dashboard",
-  k: "kitchen",
-  f: "floor",
-  m: "menu",
-  a: "analytics",
-  c: "customers",
-  t: "tables",
-  p: "pricing",
-  r: "areas",
-};
-
-const ROUTE_MAP: Record<AdminRoute, string> = {
-  dashboard: "/admin",
-  kitchen:   "/admin/orders",
-  floor:     "/admin/floor",
-  menu:      "/admin/menu",
-  analytics: "/admin/analytics",
-  customers: "/admin/customers",
-  tables:    "/admin/tables",
-  pricing:   "/admin/pricing",
-  areas:     "/admin/service-areas",
-};
 
 export function useAdminKeyboard() {
   const router = useRouter();
   const [overlay, setOverlay] = useState<Overlay>(null);
 
-  // Use refs for transient gesture state so the listener never re-registers.
+  // Mirror overlay into a ref so the once-registered listener can read it
+  // without re-subscribing (see effect deps below).
+  const overlayRef = useRef(overlay);
+  useEffect(() => { overlayRef.current = overlay; }, [overlay]);
+
+  // Use refs for transient gesture state so the listener never re-registers,
+  // plus a reactive flag that drives the on-screen "Go to…" pill.
   const gLeaderRef  = useRef(false);
   const gTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [gLeader, setGLeader] = useState(false);
 
   const clearGLeader = useCallback(() => {
     gLeaderRef.current = false;
+    setGLeader(false);
     if (gTimerRef.current) {
       clearTimeout(gTimerRef.current);
       gTimerRef.current = null;
@@ -110,6 +91,11 @@ export function useAdminKeyboard() {
         return;
       }
 
+      // Bail out of all remaining single-key chords whenever an overlay is
+      // open (the help overlay has no role=dialog / focus, so isInsideDialog
+      // does not catch it). Escape above still closes the overlay.
+      if (overlayRef.current !== null) return;
+
       // "?" — toggle help, closing palette if open.
       if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -133,17 +119,21 @@ export function useAdminKeyboard() {
       if (e.key === "g" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         gLeaderRef.current = true;
+        setGLeader(true);
         if (gTimerRef.current) clearTimeout(gTimerRef.current);
-        gTimerRef.current = setTimeout(() => { gLeaderRef.current = false; }, 1500);
+        gTimerRef.current = setTimeout(() => {
+          gLeaderRef.current = false;
+          setGLeader(false);
+        }, 1500);
         return;
       }
 
       // G + letter combo.
       if (gLeaderRef.current) {
-        const route = GOTO_MAP[e.key.toLowerCase()];
-        if (route) {
+        const href = ADMIN_GOTO[e.key.toLowerCase()];
+        if (href) {
           e.preventDefault();
-          routerRef.current.push(ROUTE_MAP[route]);
+          routerRef.current.push(href);
         }
         clearGLeader();
         return;
@@ -161,7 +151,7 @@ export function useAdminKeyboard() {
     openPalette,
     closePalette,
     closeHelp,
-    // Exposed for G-leader pill if needed.
-    gLeaderRef,
+    // Reactive flag driving the on-screen "Go to…" pill.
+    gLeader,
   };
 }

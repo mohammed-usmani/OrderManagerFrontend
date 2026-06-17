@@ -13,7 +13,7 @@ interface PageHeaderProps {
 /** Sticky admin page header with ember accent hairline and action slot. */
 export function PageHeader({ title, subtitle, actions, badge }: PageHeaderProps) {
   return (
-    <header className="sticky top-16 md:top-0 z-30 bg-paper/95 backdrop-blur-md border-b border-line">
+    <header className="sticky top-[var(--app-mobile-header-h)] md:top-0 z-30 bg-paper/95 backdrop-blur-md border-b border-line">
       {/* Ember accent hairline — ties back-office to front-of-house brand */}
       <div className="h-px bg-gradient-to-r from-primary/70 via-secondary/40 to-transparent" />
       <div className="flex items-center justify-between gap-4 px-4 md:px-8 py-3.5 max-w-[1600px] mx-auto">
@@ -24,7 +24,11 @@ export function PageHeader({ title, subtitle, actions, badge }: PageHeaderProps)
                 {title}
               </h1>
               {badge !== undefined && (
-                <span className="inline-flex items-center h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-bold font-mono tabular-nums border border-primary/20">
+                <span
+                  className="inline-flex items-center h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-bold font-mono tabular-nums border border-primary/20"
+                  aria-label={`${badge} ${title}`}
+                  title={`${badge} ${title}`}
+                >
                   {badge}
                 </span>
               )}

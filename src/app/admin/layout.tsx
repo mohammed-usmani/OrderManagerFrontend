@@ -1,12 +1,18 @@
 import type { ReactNode } from "react";
 import { AdminKeyboardProvider } from "@/components/admin/AdminKeyboardProvider";
+import { AdminGuard } from "@/components/admin/AdminGuard";
 
 /**
- * Admin layout — mounts the keyboard-shortcut provider ONCE for every /admin
- * route. Because it lives here (not per-page), the global key listener, command
- * palette (⌘K), shortcuts help (?), and goto chords (G+letter) stay active and
- * persistent across admin navigation — no need to click the page on each route.
+ * Admin layout — gates every /admin route behind AdminGuard (redirects
+ * non-admins) and mounts the keyboard-shortcut provider ONCE. Because both live
+ * here (not per-page), the global key listener, command palette (⌘K), shortcuts
+ * help (?), and goto chords (G+letter) stay active across admin navigation, and
+ * each page no longer needs its own auth redirect boilerplate.
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <AdminKeyboardProvider>{children}</AdminKeyboardProvider>;
+  return (
+    <AdminGuard>
+      <AdminKeyboardProvider>{children}</AdminKeyboardProvider>
+    </AdminGuard>
+  );
 }

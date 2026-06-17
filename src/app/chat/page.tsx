@@ -1,14 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useVoiceAgent,
   type AgentStatus,
+  type TableContext,
 } from "@/contexts/VoiceAgentContext";
 import { AppShell } from "@/components/AppShell";
 import { Canvas } from "@/components/Canvas";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+/** Single source of the dine-in table chip — guards the binding once. */
+function TableBadge({ ctx }: { ctx: TableContext }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="material-symbols-outlined text-[18px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
+        table_restaurant
+      </span>
+      Table {ctx.label}
+      {ctx.zoneName ? ` · ${ctx.zoneName}` : ""}
+      {ctx.isAc ? " · AC" : ""}
+    </span>
+  );
+}
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   disconnected: "Tap to talk to Arjun",
@@ -44,9 +60,9 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user, router]);
 
-  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued, echoSuppressed, tableContext } =
+  const { status, canvas, isVoiceActive, toggleVoice, warningSecondsLeft, queued, echoSuppressed, tableContext, setTableContext, transcript } =
     useVoiceAgent();
-  const dineIn = tableContext !== null;
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const isConnecting = status === "connecting";
   const isIdle = canvas.kind === "idle";
@@ -78,19 +94,30 @@ export default function ChatPage() {
           stays a slim context strip, not a second wordmark. */}
       <div className="hidden md:flex items-center justify-between px-8 py-4 border-b border-white/5">
         <p className="text-on-surface-variant text-sm">
-          {dineIn ? (
-            <span className="inline-flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
-                table_restaurant
-              </span>
-              Table {tableContext!.label}
-              {tableContext!.zoneName ? ` · ${tableContext!.zoneName}` : ""}
-              {tableContext!.isAc ? " · AC" : ""} — tell Arjun what you’d like.
+          {tableContext ? (
+            <span className="inline-flex items-center gap-2 flex-wrap">
+              <TableBadge ctx={tableContext} /> — tell Arjun what you’d like.
+              <button
+                onClick={() => setTableContext(null)}
+                className="text-xs underline text-on-surface-variant/70 hover:text-on-surface"
+              >
+                Not at this table?
+              </button>
             </span>
           ) : (
             "Parcel delivery across Bandra — tell Arjun what you’re craving."
           )}
         </p>
+        <div className="flex items-center gap-3">
+          {transcript.length > 0 && (
+            <button
+              onClick={() => setShowTranscript((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">subtitles</span>
+              {showTranscript ? "Hide" : "Transcript"}
+            </button>
+          )}
         <div className={`flex items-center gap-2 ${live ? "text-primary" : "text-on-surface-variant"}`}>
           <span
             className="material-symbols-outlined text-[18px]"
@@ -100,7 +127,25 @@ export default function ChatPage() {
           </span>
           <span className="text-xs uppercase tracking-[0.18em]">{statusText}</span>
         </div>
+        </div>
       </div>
+
+      {/* Transcript drawer — accessible record of the conversation (matters for
+          allergy / order accuracy). Toggled from the status bar. */}
+      {showTranscript && transcript.length > 0 && (
+        <div className="hidden md:block border-b border-white/5 bg-black/20 max-h-56 overflow-y-auto px-8 py-3">
+          <ul className="space-y-1.5 max-w-[1400px] mx-auto">
+            {transcript.map((t, i) => (
+              <li key={i} className="flex gap-2 text-sm">
+                <span className={`shrink-0 text-[11px] font-semibold uppercase tracking-wider pt-0.5 ${t.role === "assistant" ? "text-primary" : "text-on-surface-variant"}`}>
+                  {t.role === "assistant" ? "Arjun" : "You"}
+                </span>
+                <span className="text-on-surface">{t.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Content area — Canvas or an inviting idle state */}
       {/* Big bottom padding clears the floating mic + bottom nav so the last
@@ -112,7 +157,11 @@ export default function ChatPage() {
             centered ? "md:min-h-full md:flex md:flex-col md:justify-center" : ""
           }`}
         >
-          {isIdle ? <IdleHero /> : <Canvas canvas={canvas} />}
+          {isIdle ? <IdleHero /> : (
+            <ErrorBoundary resetKey={canvas.kind}>
+              <Canvas canvas={canvas} />
+            </ErrorBoundary>
+          )}
         </div>
       </main>
 
@@ -136,16 +185,21 @@ export default function ChatPage() {
                 >
                   timer
                 </span>
-                Call ends in{" "}
-                <span className="font-mono tabular-nums">
-                  {Math.floor(warningSecondsLeft / 60)}:
-                  {String(warningSecondsLeft % 60).padStart(2, "0")}
-                </span>
+                {warningSecondsLeft <= 0 ? (
+                  "Wrapping up…"
+                ) : (
+                  <>
+                    Call ends in{" "}
+                    <span className="font-mono tabular-nums">
+                      {Math.floor(warningSecondsLeft / 60)}:
+                      {String(warningSecondsLeft % 60).padStart(2, "0")}
+                    </span>
+                  </>
+                )}
               </div>
             )}
             <button
               onClick={toggleVoice}
-              disabled={isConnecting && !queued}
               aria-label={statusText}
               className={`
                 relative flex items-center justify-center
@@ -183,8 +237,7 @@ export default function ChatPage() {
 }
 
 function IdleHero() {
-  const { toggleVoice, status, tableContext } = useVoiceAgent();
-  const isConnecting = status === "connecting";
+  const { tableContext } = useVoiceAgent();
   const dineIn = tableContext !== null;
   const suggestions = dineIn ? DINE_IN_SUGGESTIONS : SUGGESTIONS;
 
@@ -203,8 +256,8 @@ function IdleHero() {
       </div>
 
       <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-tertiary mb-3">
-        {dineIn
-          ? `Table ${tableContext!.label}${tableContext!.zoneName ? ` · ${tableContext!.zoneName}` : ""}${tableContext!.isAc ? " · AC" : ""}`
+        {tableContext
+          ? `Table ${tableContext.label}${tableContext.zoneName ? ` · ${tableContext.zoneName}` : ""}${tableContext.isAc ? " · AC" : ""}`
           : "Saffron & Smoke · Bandra West"}
       </p>
       <h2 className="font-headline font-semibold text-on-surface text-3xl md:text-4xl mb-3 leading-[1.1]">
@@ -229,13 +282,13 @@ function IdleHero() {
       <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-on-surface-variant mb-3">
         Try saying
       </p>
-      <div className="grid grid-cols-2 gap-2.5 w-full max-w-md">
+      {/* Non-interactive examples — there's no text channel; the mic is the one
+          control, so these are prompts to say out loud, not buttons. */}
+      <ul className="grid grid-cols-2 gap-2.5 w-full max-w-md">
         {suggestions.map((s) => (
-          <button
+          <li
             key={s.text}
-            onClick={toggleVoice}
-            disabled={isConnecting}
-            className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-left hover:border-primary/40 hover:bg-primary/5 active:scale-95 transition-all disabled:opacity-50"
+            className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-left"
           >
             <span
               className="material-symbols-outlined text-primary text-[19px] shrink-0"
@@ -244,11 +297,11 @@ function IdleHero() {
               {s.icon}
             </span>
             <span className="text-on-surface text-xs font-medium leading-tight">
-              {s.text}
+              &ldquo;{s.text}&rdquo;
             </span>
-          </button>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

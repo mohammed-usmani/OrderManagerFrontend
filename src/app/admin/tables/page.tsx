@@ -24,7 +24,7 @@ import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Button, Card, Modal, EmptyState } from "@/components/admin/ui";
+import { Button, Modal, EmptyState } from "@/components/admin/ui";
 
 const REFRESH_MS = 8000;
 
@@ -55,7 +55,7 @@ const STATUS_META: Record<TableStatus, { label: string; dot: string; bg: string;
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminTablesPage() {
-  const { isAuthenticated, user, token } = useAuth();
+  const { token } = useAuth();
   const router = useRouter();
 
   const [floors, setFloors] = useState<FloorMapFloorAPI[]>([]);
@@ -67,11 +67,6 @@ export default function AdminTablesPage() {
   // Modals
   const [settleSessionId, setSettleSessionId] = useState<string | null>(null);
   const [qrTable, setQrTable] = useState<{ table: FloorTableAPI; zoneName: string } | null>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated) { router.replace("/auth/signin"); return; }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -94,8 +89,6 @@ export default function AdminTablesPage() {
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [load]);
-
-  if (!isAuthenticated || !user?.is_admin) return null;
 
   const activeFloor = floors.find((f) => f.id === activeFloorId) ?? floors[0] ?? null;
 
@@ -511,10 +504,12 @@ function QrModal({
       <style>body{font-family:Georgia,serif;text-align:center;padding:40px}
       h1{font-size:22px;margin:0 0 4px}p{color:#666;margin:0 0 20px}
       img{width:300px;height:300px}</style></head>
-      <body onload="window.print()">
+      <body>
         <h1>Saffron &amp; Smoke</h1>
         <p>${zoneName} · Table ${table.label}</p>
-        <img src="${qrUrl(table.qr_token, 300)}" alt="QR" />
+        <img src="${qrUrl(table.qr_token, 300)}" alt="QR"
+          onload="window.print()"
+          onerror="document.body.innerHTML+='<p style=\\'color:#a00\\'>QR could not be loaded — print manually once it appears.</p>'" />
         <p style="margin-top:20px">Scan to order by voice</p>
       </body></html>`);
     w.document.close();
@@ -537,6 +532,14 @@ function QrModal({
         <img
           src={qrUrl(table.qr_token)}
           alt={`QR for table ${table.label}`}
+          onError={(e) => {
+            const img = e.currentTarget;
+            img.style.display = "none";
+            img.insertAdjacentHTML(
+              "afterend",
+              `<div class="w-56 h-56 rounded-xl border border-line bg-paper-sunken flex flex-col items-center justify-center gap-1 text-center text-xs text-ink-soft p-4"><span class="material-symbols-outlined text-[28px]">qr_code_2</span>QR generator unavailable.<br/>Link: /t/${table.qr_token}</div>`
+            );
+          }}
           className="w-56 h-56 rounded-xl border border-line bg-white shadow-sm"
         />
         <p className="text-xs text-ink-soft text-center">

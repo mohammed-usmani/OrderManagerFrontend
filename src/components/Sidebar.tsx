@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { ADMIN_ROUTES, activeHref, shortcutFor } from "@/lib/adminRoutes";
 
 interface NavItem {
   href: string;
@@ -15,30 +16,12 @@ const PUBLIC_NAV: NavItem[] = [
   { href: "/chat", icon: "mic", label: "Order" },
 ];
 
-const ADMIN_NAV: NavItem[] = [
-  { href: "/admin",             icon: "dashboard",       label: "Dashboard",     shortcut: "G D" },
-  { href: "/admin/analytics",   icon: "monitoring",      label: "Analytics",     shortcut: "G A" },
-  { href: "/admin/orders",      icon: "soup_kitchen",    label: "Kitchen",       shortcut: "G K" },
-  { href: "/admin/floor",       icon: "grid_view",       label: "Floor",         shortcut: "G F" },
-  { href: "/admin/tables",      icon: "table_restaurant",label: "Tables & QR" },
-  { href: "/admin/menu",        icon: "restaurant_menu", label: "Menu",          shortcut: "G M" },
-  { href: "/admin/pricing",     icon: "payments",        label: "Pricing" },
-  { href: "/admin/customers",   icon: "groups",          label: "Customers",     shortcut: "G C" },
-  { href: "/admin/service-areas", icon: "pin_drop",      label: "Delivery Areas" },
-];
-
-/** Most-specific-prefix wins. Prevents parent routes (like /admin) from
- *  lighting up when you're on a child route (like /admin/orders). */
-function activeHref(pathname: string, items: readonly NavItem[]): string | null {
-  let best: string | null = null;
-  for (const { href } of items) {
-    const matches = pathname === href || pathname.startsWith(href + "/");
-    if (matches && (best === null || href.length > best.length)) {
-      best = href;
-    }
-  }
-  return best;
-}
+const ADMIN_NAV: NavItem[] = ADMIN_ROUTES.map((r) => ({
+  href: r.href,
+  icon: r.icon,
+  label: r.label,
+  shortcut: shortcutFor(r),
+}));
 
 export function Sidebar() {
   const pathname = usePathname();

@@ -261,7 +261,16 @@ body::after {
 
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal-sm, .animate-breathe, .animate-slide-up,
-  .animate-fade-in, .animate-shake { animation: none !important; }
+  .animate-fade-in, .animate-shake,
+  .animate-pulse-ring, .animate-ping { animation: none !important; }
+  /* Inline ember-float particles on the landing page */
+  [style*="ember-float"] { animation: none !important; opacity: 0 !important; }
+}
+
+/* Height of the fixed mobile app header — consumed by AdminShell padding and
+   the sticky PageHeader offset so they stay in sync if the header resizes. */
+:root {
+  --app-mobile-header-h: 4rem;
 }
 
 /* ---------------- Admin utility classes ---------------- */
@@ -282,6 +291,16 @@ kbd {
   border-radius: 4px;
   box-shadow: 0 1px 0 var(--color-line-strong);
   white-space: nowrap;
+}
+
+/* Dark variant for kbd shown inside the dark sidebar / surfaces */
+.kbd-dark,
+.kbd-dark kbd,
+aside kbd {
+  color: var(--color-on-surface-variant);
+  background: var(--color-surface-container-highest);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Row keyboard focus indicator for admin tables */

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type MenuItemAPI } from "@/lib/api";
+import { BRAND } from "@/lib/brand";
 
 // Public-facing delivery zone (mirrors the seeded service areas).
 const DELIVERY_AREAS = [
@@ -76,12 +77,13 @@ function computeOpenState(): OpenState {
   const ist = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
   const day = ist.getDay(); // 0 Sun … 1 Mon
   const h = ist.getHours();
-  if (day === 1) return { open: false, label: "Closed Mondays" };
+  if (day === 1) return { open: false, label: "Closed today · open Tuesday 11 AM" };
   if (h >= 11 && h < 15) return { open: true, label: "Open now · lunch till 3 PM" };
   if (h >= 18 && h < 23) return { open: true, label: "Open now · dinner till 11 PM" };
   if (h < 11) return { open: false, label: "Opens at 11 AM" };
   if (h >= 15 && h < 18) return { open: false, label: "Reopens at 6 PM" };
-  return { open: false, label: "Opens 11 AM tomorrow" };
+  // After dinner: tomorrow is Monday (closed) only when today is Sunday (day===0).
+  return { open: false, label: day === 0 ? "Opens Tuesday 11 AM" : "Opens 11 AM tomorrow" };
 }
 
 export default function LandingPage() {
@@ -122,6 +124,9 @@ export default function LandingPage() {
 
   const scrollToMenu = () =>
     document.getElementById("menu")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // Staff are being redirected to /admin — don't flash the customer landing.
+  if (isAuthenticated && user?.is_admin) return null;
 
   return (
     <main className="min-h-dvh flex flex-col">
@@ -236,6 +241,7 @@ export default function LandingPage() {
                     src={d.image}
                     alt={d.name}
                     loading="lazy"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.07]"
                   />
                 ) : (
@@ -328,7 +334,7 @@ export default function LandingPage() {
               <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
               <span className="font-headline font-semibold text-on-surface">Saffron &amp; Smoke</span>
             </div>
-            <p className="text-on-surface-variant text-xs leading-relaxed">14 Hill Road, Bandra West, Mumbai 400050</p>
+            <p className="text-on-surface-variant text-xs leading-relaxed">{BRAND.address.line1}, {BRAND.address.line2}</p>
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant/70 mb-2">Hours</p>

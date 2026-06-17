@@ -65,14 +65,21 @@ export async function startMicCapture(
     onAudioChunk(new Uint8Array(int16.buffer));
   };
 
+  // Keep the ScriptProcessor pumping (onaudioprocess only fires while it's in
+  // the graph) but route it through a muted GainNode so the raw mic is never
+  // audible on the speakers (prevents feedback / self-echo).
+  const silentSink = audioCtx.createGain();
+  silentSink.gain.value = 0;
   source.connect(processor);
-  processor.connect(audioCtx.destination);
+  processor.connect(silentSink);
+  silentSink.connect(audioCtx.destination);
 
   // Caller owns the AudioContext lifecycle (it's shared with playback).
   return {
     stop: () => {
       processor.disconnect();
       source.disconnect();
+      silentSink.disconnect();
       stream.getTracks().forEach((t) => t.stop());
     },
   };
@@ -129,14 +136,10 @@ export function createAudioPlayer(
     nextStartTime = 0; // caller closes the shared AudioContext
   }
 
-  function interrupt() {
-    nextStartTime = 0;
-  }
-
   /** Seconds of audio still queued to play. 0 means player is idle. */
   function timeRemaining(): number {
     return Math.max(0, nextStartTime - audioCtx.currentTime);
   }
 
-  return { play, stop, interrupt, timeRemaining };
+  return { play, stop, timeRemaining };
 }

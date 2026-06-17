@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
@@ -38,8 +37,7 @@ const RANGE_GRAN: Record<Range, Gran> = {
 };
 
 export default function AdminAnalyticsPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [range, setRange] = useState<Range>("30d");
   const [overview, setOverview] = useState<AnalyticsOverviewAPI | null>(null);
@@ -47,14 +45,6 @@ export default function AdminAnalyticsPage() {
   const [hours, setHours] = useState<PeakHourAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/auth/signin");
-      return;
-    }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -88,8 +78,6 @@ export default function AdminAnalyticsPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  if (!isAuthenticated || !user?.is_admin) return null;
 
   const split = overview?.split;
   const splitTotal = split ? split.dine_in.revenue + split.parcel.revenue : 0;

@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
+  SHAPE_OPTIONS,
   type FloorAPI,
   type FloorMapFloorAPI,
   type FloorWriteAPI,
   type FloorZoneAPI,
   type TableSessionDetailAPI,
+  type TableShape,
   type TableWriteAPI,
   type ZoneWriteAPI,
 } from "@/lib/api";
@@ -24,11 +25,10 @@ const REFRESH_MS = 10000;
 const ZONE_COLORS = ["#cfe8ff", "#ffe0c2", "#d6f5d6", "#f3d6f0", "#fff3bf", "#d6f0f0"];
 
 // Local editable copy of a table while in edit mode.
-type Draft = { pos_x: number | null; pos_y: number | null; shape: string | null; zone_id: string };
+type Draft = { pos_x: number | null; pos_y: number | null; shape: TableShape | null; zone_id: string };
 
 export default function AdminFloorPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [floors, setFloors] = useState<FloorMapFloorAPI[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -44,14 +44,6 @@ export default function AdminFloorPage() {
   const [addTableZoneId, setAddTableZoneId] = useState<string | null>(null);
   const [zoneModal, setZoneModal] = useState<"new" | FloorZoneAPI | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "zone" | "table"; id: string; name: string } | null>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/auth/signin");
-      return;
-    }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -117,7 +109,12 @@ export default function AdminFloorPage() {
           ? { pos_x: d.pos_x, pos_y: d.pos_y }
           : {}),
       }));
-      await api.adminSaveTablePositions(token, updates);
+      const res = await api.adminSaveTablePositions(token, updates);
+      if (res.updated < updates.length) {
+        setError(`Saved ${res.updated} of ${updates.length} tables — some changes may not have applied.`);
+      } else {
+        setError("");
+      }
       // Stay in saving state until load() finishes so the polling interval
       // cannot fire between the save response and the data refresh.
       await load();
@@ -129,8 +126,6 @@ export default function AdminFloorPage() {
       setSaving(false);
     }
   };
-
-  if (!isAuthenticated || !user?.is_admin) return null;
 
   // --- build canvas tables for the active floor ---
   const liveTables: CanvasTable[] = [];
@@ -237,6 +232,7 @@ export default function AdminFloorPage() {
               <Legend color="#e6ddcc" label="Free" />
               <Legend color="#ff6a1a" label="Seated" />
               <Legend color="#f59e0b" label="Bill requested" />
+              <Legend color="#9c8a70" label="Cleaning" />
               <span className="text-ink-faint">Tap a seated table to settle.</span>
             </div>
           )}
@@ -276,10 +272,23 @@ export default function AdminFloorPage() {
                   selected={selected}
                   draft={selectedId ? draft[selectedId] : null}
                   onPlace={(id) =>
-                    setDraft((p) => ({
-                      ...p,
-                      [id]: { ...p[id], pos_x: Math.round(activeFloor.width / 2), pos_y: Math.round(activeFloor.height / 2) },
-                    }))
+                    setDraft((p) => {
+                      // Cascade-offset each newly placed table so they don't stack.
+                      const placedCount = Object.values(p).filter(
+                        (d) => d.pos_x !== null && d.pos_y !== null
+                      ).length;
+                      const off = (placedCount % 6) * 40;
+                      const cx = Math.round(activeFloor.width / 2) + off;
+                      const cy = Math.round(activeFloor.height / 2) + off;
+                      return {
+                        ...p,
+                        [id]: {
+                          ...p[id],
+                          pos_x: Math.min(cx, activeFloor.width - 40),
+                          pos_y: Math.min(cy, activeFloor.height - 40),
+                        },
+                      };
+                    })
                   }
                   onPatchSelected={(patch) =>
                     selectedId && setDraft((p) => ({ ...p, [selectedId]: { ...p[selectedId], ...patch } }))
@@ -450,10 +459,10 @@ function EditPanel({
             <div className="font-headline font-semibold text-ink">Table {selected.label} · {selected.seats}p</div>
             <label className="block">
               <span className="text-[11px] text-ink-soft">Shape</span>
-              <Select value={draft.shape ?? "rect"} onChange={(e) => onPatchSelected({ shape: e.target.value })} className="w-full mt-1">
-                <option value="round">Round</option>
-                <option value="square">Square</option>
-                <option value="rect">Rectangle</option>
+              <Select value={draft.shape ?? "rect"} onChange={(e) => onPatchSelected({ shape: e.target.value as TableShape })} className="w-full mt-1">
+                {SHAPE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
               </Select>
             </label>
             <label className="block">
@@ -487,6 +496,11 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
   const [floors, setFloors] = useState<FloorAPI[]>([]);
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  // Inline rename + themed delete confirmation (no native prompt/confirm).
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<FloorAPI | null>(null);
 
   const reload = useCallback(async () => {
     try { setFloors(await api.adminListFloors(token)); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -494,22 +508,32 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
   useEffect(() => { reload(); }, [reload]);
 
   const add = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || busy) return;
+    setBusy(true);
     try {
       await api.adminCreateFloor(token, { name: name.trim(), display_order: floors.length });
       setName(""); await reload(); onChanged();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
   };
-  const rename = async (f: FloorAPI) => {
-    const n = window.prompt("Rename floor", f.name);
-    if (!n?.trim()) return;
-    try { await api.adminUpdateFloor(token, f.id, { name: n.trim() } as FloorWriteAPI); await reload(); onChanged(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  const startRename = (f: FloorAPI) => { setRenamingId(f.id); setDraftName(f.name); };
+  const commitRename = async () => {
+    if (!renamingId || !draftName.trim() || busy) return;
+    setBusy(true);
+    try {
+      await api.adminUpdateFloor(token, renamingId, { name: draftName.trim() } as FloorWriteAPI);
+      setRenamingId(null); await reload(); onChanged();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
   };
-  const remove = async (f: FloorAPI) => {
-    if (!confirm(`Delete floor "${f.name}"? It must have no zones.`)) return;
-    try { await api.adminDeleteFloor(token, f.id); await reload(); onChanged(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  const confirmDelete = async () => {
+    if (!pendingDelete || busy) return;
+    setBusy(true);
+    try {
+      await api.adminDeleteFloor(token, pendingDelete.id);
+      setPendingDelete(null); await reload(); onChanged();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setPendingDelete(null); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -518,19 +542,64 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
       <div className="space-y-2">
         {floors.map((f) => (
           <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-line px-3 py-2">
-            <span className="text-sm text-ink font-medium">{f.name}</span>
-            <div className="flex gap-1">
-              <Button size="sm" variant="ghost" onClick={() => rename(f)}>Rename</Button>
-              <Button size="sm" variant="ghost" onClick={() => remove(f)}><span className="material-symbols-outlined text-[15px]">delete</span></Button>
-            </div>
+            {renamingId === f.id ? (
+              <>
+                <Input
+                  autoFocus
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setRenamingId(null); }}
+                  className="flex-1"
+                />
+                <div className="flex gap-1">
+                  <Button size="sm" variant="primary" icon="check" onClick={commitRename} disabled={busy} />
+                  <Button size="sm" variant="ghost" onClick={() => setRenamingId(null)} disabled={busy}>Cancel</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-sm text-ink font-medium">{f.name}</span>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => startRename(f)}>Rename</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setPendingDelete(f)}><span className="material-symbols-outlined text-[15px]">delete</span></Button>
+                </div>
+              </>
+            )}
           </div>
         ))}
         {floors.length === 0 && <p className="text-sm text-ink-faint">No floors yet.</p>}
       </div>
       <div className="flex gap-2 pt-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New floor name (e.g. Rooftop)" className="flex-1" />
-        <Button variant="primary" icon="add" onClick={add}>Add</Button>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          placeholder="New floor name (e.g. Rooftop)"
+          className="flex-1"
+        />
+        <Button variant="primary" icon="add" onClick={add} disabled={busy}>Add</Button>
       </div>
+
+      {pendingDelete && (
+        <Modal
+          open
+          onClose={() => setPendingDelete(null)}
+          title="Delete floor"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</Button>
+              <Button variant="danger" icon="delete" onClick={confirmDelete} disabled={busy}>
+                {busy ? "Deleting…" : "Delete"}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink">
+            Delete <span className="font-semibold">{pendingDelete.name}</span>? It must have no zones.
+            This cannot be undone.
+          </p>
+        </Modal>
+      )}
     </Modal>
   );
 }
@@ -641,21 +710,26 @@ function AddTableModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const SHAPE_DEFAULT_SEATS: Record<"round" | "square" | "rect", number> = {
+  const SHAPE_DEFAULT_SEATS: Record<TableShape, number> = {
     round: 2,
     square: 4,
     rect: 4,
   };
+  const SHAPE_ICON: Record<TableShape, string> = {
+    round: "circle",
+    square: "crop_square",
+    rect: "crop_landscape",
+  };
 
   const [zoneId, setZoneId] = useState(defaultZoneId);
   const [label, setLabel] = useState("");
-  const [shape, setShape] = useState<"round" | "square" | "rect">("rect");
+  const [shape, setShape] = useState<TableShape>("rect");
   const [seats, setSeats] = useState(SHAPE_DEFAULT_SEATS["rect"]);
   const [seatsManuallyEdited, setSeatsManuallyEdited] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const handleShapeChange = (s: "round" | "square" | "rect") => {
+  const handleShapeChange = (s: TableShape) => {
     setShape(s);
     if (!seatsManuallyEdited) {
       setSeats(SHAPE_DEFAULT_SEATS[s]);
@@ -735,7 +809,8 @@ function AddTableModal({
             value={seats.toString()}
             onChange={(e) => {
               setSeatsManuallyEdited(true);
-              setSeats(Math.max(1, Number(e.target.value)));
+              const n = Number(e.target.value);
+              setSeats(Number.isFinite(n) ? Math.min(20, Math.max(1, n)) : 1);
             }}
             className="w-full"
           />
@@ -746,21 +821,19 @@ function AddTableModal({
       <div>
         <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint block mb-1.5">Shape</span>
         <div className="flex gap-2">
-          {(["rect", "square", "round"] as const).map((s) => (
+          {SHAPE_OPTIONS.map((s) => (
             <button
-              key={s}
+              key={s.value}
               type="button"
-              onClick={() => handleShapeChange(s)}
+              onClick={() => handleShapeChange(s.value)}
               className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-semibold transition-all ${
-                shape === s
+                shape === s.value
                   ? "border-primary bg-primary/8 text-primary"
                   : "border-line text-ink-soft hover:border-line-strong"
               }`}
             >
-              <span className="material-symbols-outlined text-[20px]">
-                {s === "round" ? "circle" : s === "square" ? "crop_square" : "crop_landscape"}
-              </span>
-              {s[0].toUpperCase() + s.slice(1)}
+              <span className="material-symbols-outlined text-[20px]">{SHAPE_ICON[s.value]}</span>
+              {s.label}
             </button>
           ))}
         </div>
@@ -879,9 +952,14 @@ function DeleteConfirmModal({
   name: string;
   token: string;
   id: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }) {
+  const [busy, setBusy] = useState(false);
+  const handleConfirm = async () => {
+    setBusy(true);
+    try { await onConfirm(); } finally { setBusy(false); }
+  };
   return (
     <Modal
       open
@@ -889,8 +967,10 @@ function DeleteConfirmModal({
       title={`Delete ${type}`}
       footer={
         <>
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button variant="danger" icon="delete" onClick={onConfirm}>Delete</Button>
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button variant="danger" icon="delete" onClick={handleConfirm} disabled={busy}>
+            {busy ? "Deleting…" : "Delete"}
+          </Button>
         </>
       }
     >

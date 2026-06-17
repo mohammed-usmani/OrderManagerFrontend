@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
@@ -31,8 +30,7 @@ type SortDir = "asc" | "desc";
 const CATEGORIES = ["starters", "mains", "breads", "rice", "desserts", "beverages"];
 
 export default function AdminMenuPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [items, setItems] = useState<MenuItemAPI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,14 +55,8 @@ export default function AdminMenuPage() {
     original: string | number | null;
   } | null>(null);
   const [cellDraft, setCellDraft] = useState("");
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/auth/signin");
-      return;
-    }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
+  // Inline-edit validation feedback (red border + keeps the cell open).
+  const [cellError, setCellError] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -116,7 +108,7 @@ export default function AdminMenuPage() {
   const markBusy = (ids: string[], busy: boolean) =>
     setBusyIds((prev) => {
       const next = new Set(prev);
-      for (const id of ids) busy ? next.add(id) : next.delete(id);
+      for (const id of ids) { if (busy) next.add(id); else next.delete(id); }
       return next;
     });
 
@@ -196,6 +188,7 @@ export default function AdminMenuPage() {
   ) => {
     setEditingCell({ id, field, original: current });
     setCellDraft(current == null ? "" : String(current));
+    setCellError(false);
   };
 
   const commitCellEdit = async () => {
@@ -206,6 +199,7 @@ export default function AdminMenuPage() {
     // Skip the PATCH entirely when nothing changed.
     if (trimmed === (original == null ? "" : String(original))) {
       setEditingCell(null);
+      setCellError(false);
       return;
     }
 
@@ -213,21 +207,20 @@ export default function AdminMenuPage() {
     if (field === "price") {
       const n = parseFloat(trimmed);
       if (!isFinite(n) || n <= 0) {
-        // Invalid price — stay in edit mode with a visual cue via the input
-        // (the caller's onBlur will re-trigger, so we guard re-entry with
-        // editingCell being non-null).
+        // Invalid price — keep editing and flag the cell red.
+        setCellError(true);
         return;
       }
       body.price = n;
     } else if (field === "name") {
       if (!trimmed) {
-        // Required field blanked — keep editing.
+        setCellError(true);
         return;
       }
       body.name = trimmed;
     } else if (field === "category") {
       if (!trimmed) {
-        // Required field blanked — keep editing.
+        setCellError(true);
         return;
       }
       body.category = trimmed;
@@ -236,6 +229,7 @@ export default function AdminMenuPage() {
       (body as Record<string, string | null>)[field] = trimmed || null;
     }
 
+    setCellError(false);
     setEditingCell(null);
     if (Object.keys(body).length > 0) await patchItem(id, body);
   };
@@ -250,7 +244,7 @@ export default function AdminMenuPage() {
   const toggleOne = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
 
@@ -261,8 +255,6 @@ export default function AdminMenuPage() {
       setSortDir("asc");
     }
   };
-
-  if (!isAuthenticated || !user?.is_admin) return null;
 
   return (
     <AppShell title="Menu">
@@ -357,7 +349,6 @@ export default function AdminMenuPage() {
             <Card className="overflow-hidden">
               <CardHeader>
                 <p className="font-semibold text-ink text-sm">{visible.length} items</p>
-                <p className="text-xs text-ink-faint">Click a cell to edit inline</p>
               </CardHeader>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -412,6 +403,7 @@ export default function AdminMenuPage() {
                             onBeginEdit={() => beginCellEdit(item.id, "name", item.name)}
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
+                            invalid={cellError}
                           >
                             <span className="font-medium text-ink">{item.name}</span>
                           </EditableCell>
@@ -422,6 +414,7 @@ export default function AdminMenuPage() {
                             onBeginEdit={() => beginCellEdit(item.id, "category", item.category)}
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
+                            invalid={cellError}
                           >
                             <span className="text-ink-soft lowercase">{item.category}</span>
                           </EditableCell>
@@ -434,6 +427,7 @@ export default function AdminMenuPage() {
                             onCommit={commitCellEdit}
                             onCancel={() => setEditingCell(null)}
                             inputMode="decimal"
+                            invalid={cellError}
                           >
                             <span className="font-medium text-ink tabular-nums">
                               {formatPrice(item.price)}
@@ -574,6 +568,7 @@ function EditableCell({
   children,
   right,
   inputMode,
+  invalid,
 }: {
   active: boolean;
   draft: string;
@@ -584,6 +579,7 @@ function EditableCell({
   children: React.ReactNode;
   right?: boolean;
   inputMode?: "text" | "decimal";
+  invalid?: boolean;
 }) {
   if (active) {
     return (
@@ -602,9 +598,12 @@ function EditableCell({
             }
           }}
           inputMode={inputMode}
-          className={`w-full h-7 px-2.5 rounded-lg border border-primary bg-paper-raised text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-            right ? "text-right tabular-nums" : ""
-          }`}
+          aria-invalid={invalid || undefined}
+          className={`w-full h-7 px-2.5 rounded-lg border bg-paper-raised text-sm text-ink focus:outline-none focus:ring-2 ${
+            invalid
+              ? "border-rose-500 ring-2 ring-rose-500/30 focus:ring-rose-500/30"
+              : "border-primary focus:ring-primary/20"
+          } ${right ? "text-right tabular-nums" : ""}`}
         />
       </td>
     );
@@ -943,7 +942,7 @@ function CreateItemModal({
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {c[0].toUpperCase() + c.slice(1)}
               </option>
             ))}
           </Select>

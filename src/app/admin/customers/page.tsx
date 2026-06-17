@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
@@ -16,77 +15,82 @@ import { Button, Card, CardHeader, Input, Modal, Pager, StatusChip, Toolbar, Emp
 import { formatPrice } from "@/lib/brand";
 
 export default function AdminCustomersPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
+  const PAGE_SIZE = 20;
   const [customers, setCustomers] = useState<CustomerAPI[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [editing, setEditing] = useState<CustomerAPI | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/auth/signin");
-      return;
-    }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
-
   const load = useCallback(
-    async (q?: string) => {
+    async (q: string, pageArg: number) => {
       if (!token) return;
+      setSearching(true);
       try {
-        const data = await api.adminListCustomers(token, q);
-        setCustomers(data);
+        const data = await api.adminListCustomers(token, {
+          search: q || undefined,
+          limit: PAGE_SIZE,
+          offset: (pageArg - 1) * PAGE_SIZE,
+        });
+        setCustomers(data.items);
+        setTotal(data.total);
         setError("");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
+        setSearching(false);
       }
     },
     [token],
   );
 
+  // Debounce the search box and snap back to the first page on a new query.
   useEffect(() => {
-    load();
-  }, [load]);
-
-  // Debounced search.
-  useEffect(() => {
-    const t = setTimeout(() => load(search.trim() || undefined), 300);
+    const t = setTimeout(() => {
+      setDebounced(search.trim());
+      setPage(1);
+    }, 300);
     return () => clearTimeout(t);
-  }, [search, load]);
+  }, [search]);
 
-  // Page over the (server-filtered) customer list; reset when it changes.
-  const paged = customers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Fetch one server-side page whenever the query or page changes.
   useEffect(() => {
-    if ((page - 1) * PAGE_SIZE >= customers.length && page > 1) setPage(1);
-  }, [customers, page, PAGE_SIZE]);
+    load(debounced, page);
+  }, [load, debounced, page]);
 
-  if (!isAuthenticated || !user?.is_admin) return null;
+  // Server already returns just this page.
+  const paged = customers;
 
   return (
     <AppShell title="Customers">
       <AdminShell>
         <PageHeader
           title="Customers"
-          badge={customers.length}
+          badge={total}
           subtitle="Guest records"
           actions={
             <>
-              <Input
-                data-search
-                leadingIcon="search"
-                placeholder="Search code, phone, name, area"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-64 hidden md:block"
-              />
+              <div className="relative hidden md:block">
+                <Input
+                  data-search
+                  leadingIcon="search"
+                  placeholder="Search code, phone, name, area"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-64"
+                />
+                {searching && (
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
+                )}
+              </div>
               <Button variant="primary" icon="person_add" onClick={() => setCreateOpen(true)}>
                 Add customer
               </Button>
@@ -118,20 +122,28 @@ export default function AdminCustomersPage() {
               {[1,2,3,4,5].map((i) => <div key={i} className="skeleton h-12 rounded-xl" />)}
             </div>
           ) : customers.length === 0 ? (
-            <EmptyState
-              icon="groups"
-              title="No customers yet"
-              description="Customers appear here as the voice agent registers callers."
-              action={
-                <Button variant="primary" icon="person_add" onClick={() => setCreateOpen(true)}>
-                  Add manually
-                </Button>
-              }
-            />
+            search.trim() ? (
+              <EmptyState
+                icon="search_off"
+                title="No matches"
+                description={`No customers match “${search.trim()}”. Try a different code, phone or name.`}
+              />
+            ) : (
+              <EmptyState
+                icon="groups"
+                title="No customers yet"
+                description="Customers appear here as the voice agent registers callers."
+                action={
+                  <Button variant="primary" icon="person_add" onClick={() => setCreateOpen(true)}>
+                    Add manually
+                  </Button>
+                }
+              />
+            )
           ) : (
             <Card className="overflow-hidden">
               <CardHeader>
-                <p className="font-semibold text-ink text-sm">{customers.length} customers</p>
+                <p className="font-semibold text-ink text-sm">{total} customers</p>
               </CardHeader>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -173,14 +185,14 @@ export default function AdminCustomersPage() {
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-ink-soft font-medium">{c.order_count}</td>
                         <td className="px-4 py-3 text-right">
-                          <Button size="xs" variant="ghost" icon="open_in_new">Open</Button>
+                          <span className="material-symbols-outlined text-[16px] text-ink-faint" aria-hidden="true">chevron_right</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <Pager page={page} pageSize={PAGE_SIZE} total={customers.length} onPage={setPage} />
+              <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
             </Card>
           )}
         </main>
@@ -192,7 +204,7 @@ export default function AdminCustomersPage() {
             onClose={() => setEditing(null)}
             onSaved={() => {
               setEditing(null);
-              load(search.trim() || undefined);
+              load(debounced, page);
             }}
           />
         )}
@@ -203,7 +215,7 @@ export default function AdminCustomersPage() {
             onClose={() => setCreateOpen(false)}
             onSaved={() => {
               setCreateOpen(false);
-              load();
+              load(debounced, page);
             }}
           />
         )}

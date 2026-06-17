@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type ServiceAreaAPI, type ServiceAreaWriteAPI } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
@@ -10,8 +9,7 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, StatusChip } from "@/components/admin/ui";
 
 export default function AdminServiceAreasPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [areas, setAreas] = useState<ServiceAreaAPI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,14 +18,6 @@ export default function AdminServiceAreasPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<ServiceAreaAPI | null>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/auth/signin");
-      return;
-    }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -48,7 +38,7 @@ export default function AdminServiceAreasPage() {
   const markBusy = (id: string, busy: boolean) =>
     setBusyIds((prev) => {
       const next = new Set(prev);
-      busy ? next.add(id) : next.delete(id);
+      if (busy) next.add(id); else next.delete(id);
       return next;
     });
 
@@ -79,8 +69,6 @@ export default function AdminServiceAreasPage() {
     }
   };
 
-  if (!isAuthenticated || !user?.is_admin) return null;
-
   return (
     <AppShell title="Delivery areas">
       <AdminShell>
@@ -97,7 +85,7 @@ export default function AdminServiceAreasPage() {
         <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-28 md:pb-8 max-w-[1600px] mx-auto w-full">
           <p className="mb-3 text-xs text-ink-soft">
             The voice agent only accepts delivery orders to areas listed here. It
-            matches a caller's spoken locality or 6-digit pincode against the name,
+            matches a caller&rsquo;s spoken locality or 6-digit pincode against the name,
             aliases, and pincode below.
           </p>
 

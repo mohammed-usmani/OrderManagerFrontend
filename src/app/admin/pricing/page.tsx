@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type ChargeRuleAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Button, Card, Input, Select } from "@/components/admin/ui";
+import { Button, Card, Input, Select, EmptyState } from "@/components/admin/ui";
 
 const APPLIES_TO: ChargeRuleAPI["applies_to"][] = ["all", "dine_in", "parcel"];
 const APPLIES_LABEL: Record<string, string> = {
@@ -35,28 +34,21 @@ function previewBill(
 }
 
 export default function AdminPricingPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [charges, setCharges] = useState<ChargeRuleAPI[]>([]);
+  const [savedSnapshot, setSavedSnapshot] = useState<ChargeRuleAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/auth/signin");
-      return;
-    }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
       const res = await api.adminGetChargePolicy(token);
       setCharges(res.charges);
+      setSavedSnapshot(res.charges);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -89,6 +81,7 @@ export default function AdminPricingPage() {
     try {
       const res = await api.adminUpdateChargePolicy(token, charges);
       setCharges(res.charges);
+      setSavedSnapshot(res.charges);
       setSavedAt(Date.now());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -101,7 +94,19 @@ export default function AdminPricingPage() {
   const nonAcPreview = useMemo(() => previewBill(charges, 1000, "dine_in", false), [charges]);
   const parcelPreview = useMemo(() => previewBill(charges, 1000, "parcel", false), [charges]);
 
-  if (!isAuthenticated || !user?.is_admin) return null;
+  // Dirty when the working charges diverge from the last saved snapshot.
+  const dirty = useMemo(
+    () => JSON.stringify(charges) !== JSON.stringify(savedSnapshot),
+    [charges, savedSnapshot],
+  );
+
+  // Warn before leaving with unsaved edits (covers reload / tab close).
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
 
   return (
     <AppShell title="Pricing">
@@ -110,9 +115,17 @@ export default function AdminPricingPage() {
           title="Pricing & charges"
           subtitle="Service, GST, AC surcharge and packaging — applied on top of menu prices"
           actions={
-            <Button variant="primary" icon="save" onClick={save} disabled={saving || loading}>
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {dirty && !saving && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Unsaved changes
+                </span>
+              )}
+              <Button variant="primary" icon="save" onClick={save} disabled={saving || loading || !dirty}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
           }
         />
 
@@ -137,9 +150,16 @@ export default function AdminPricingPage() {
           )}
 
           {loading ? (
-            <div className="py-16 flex justify-center">
-              <div className="w-6 h-6 border-2 border-line-strong border-t-primary rounded-full animate-spin" />
+            <div className="space-y-2">
+              {[1,2,3,4].map((i) => <div key={i} className="skeleton h-12 rounded-xl" />)}
             </div>
+          ) : charges.length === 0 ? (
+            <EmptyState
+              icon="payments"
+              title="No charges configured"
+              description="Add a service, GST, AC or packaging charge to bill on top of menu prices."
+              action={<Button variant="primary" icon="add" onClick={addRow}>Add charge</Button>}
+            />
           ) : (
             <div className="grid lg:grid-cols-[1fr_320px] gap-4">
               {/* Editable charges */}

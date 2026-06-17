@@ -1,15 +1,14 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { api, type AdminOrderAPI } from "@/lib/api";
+import { api, type AdminOrderAPI, type OrderStatus } from "@/lib/api";
 import { formatDate, formatAge, orderAgeUrgency } from "@/lib/datetime";
 import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { Button, Card, CardHeader, Input, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
+import { Button, Card, Input, Modal, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
 
 type Filter =
   | "active" | "all" | "confirmed" | "cooking"
@@ -24,7 +23,7 @@ const FILTER_LABEL: Record<Filter, string> = {
 };
 
 // Every filter gets an active-state accent so the chip style is consistent.
-const FILTER_ACCENT: Record<string, string> = {
+const FILTER_ACCENT: Record<Filter, string> = {
   active:    "bg-primary text-on-primary border-primary/40 shadow-sm",
   all:       "bg-ink text-paper border-ink/40 shadow-sm",
   confirmed: "text-primary border-primary/30 bg-primary/8",
@@ -36,7 +35,7 @@ const FILTER_ACCENT: Record<string, string> = {
   cancelled: "text-rose-700 border-rose-300/50 bg-rose-50",
 };
 
-const STATUS_VERB: Record<string, string> = {
+const STATUS_VERB: Partial<Record<OrderStatus, string>> = {
   cooking: "Start cooking",
   served: "Served",
   ready: "Ready",
@@ -48,8 +47,7 @@ const STATUS_VERB: Record<string, string> = {
 const REFRESH_MS = 15000;
 
 export default function AdminOrdersPage() {
-  const { isAuthenticated, user, token } = useAuth();
-  const router = useRouter();
+  const { token } = useAuth();
 
   const [filter, setFilter]     = useState<Filter>("active");
   const [orders, setOrders]     = useState<AdminOrderAPI[]>([]);
@@ -64,19 +62,24 @@ export default function AdminOrdersPage() {
   const [search, setSearch]     = useState("");
   const [sortKey, setSortKey]   = useState<SortKey>("created_at");
   const [sortDir, setSortDir]   = useState<SortDir>("desc");
-  const [focusedIdx, setFocusedIdx] = useState<number>(-1);
+  // Focus is tracked by order id (not array index) so the 15s refresh / reorder
+  // keeps the keyboard cursor on the same order.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  // Orders seen as "confirmed" since the last refresh — pulse briefly, then settle.
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
+  // Two-step / dialog confirmation for destructive cancels.
+  const [armedCancelId, setArmedCancelId] = useState<string | null>(null);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
-  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated) { router.replace("/auth/signin"); return; }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
 
   // Tracks whether this is the very first load (orders array is empty).
   const isFirstLoad = useRef(true);
+  // Every order id seen on a prior refresh, so we only pulse genuinely-new ones.
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -87,6 +90,22 @@ export default function AdminOrdersPage() {
     }
     try {
       const data = await api.adminListOrders(token, filter);
+      // Flag confirmed orders we haven't seen before as "new" (pulse a few sec).
+      const fresh = data
+        .filter((o) => o.status === "confirmed" && !seenIdsRef.current.has(o.id))
+        .map((o) => o.id);
+      const firstLoad = seenIdsRef.current.size === 0;
+      data.forEach((o) => seenIdsRef.current.add(o.id));
+      if (fresh.length && !firstLoad) {
+        setNewIds((prev) => new Set([...prev, ...fresh]));
+        window.setTimeout(() => {
+          setNewIds((prev) => {
+            const n = new Set(prev);
+            fresh.forEach((id) => n.delete(id));
+            return n;
+          });
+        }, 6000);
+      }
       setOrders(data);
       setError("");
     } catch (e) {
@@ -98,13 +117,12 @@ export default function AdminOrdersPage() {
     }
   }, [token, filter]);
 
-  // When filter changes reset to "first-load" mode so the skeleton shows
-  // only if there was no prior data for that filter.
+  // When filter changes, drop into "first-load" mode so the skeleton shows only
+  // if there's no prior data — but keep the previous rows visible (dimmed via the
+  // refreshing spinner) instead of flashing an empty skeleton on every switch.
   useEffect(() => {
-    // Clear stale data immediately so the previous filter's rows don't flash
-    // while the new request is in-flight.
-    setOrders([]);
-    isFirstLoad.current = true;
+    isFirstLoad.current = orders.length === 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   useEffect(() => {
@@ -142,8 +160,16 @@ export default function AdminOrdersPage() {
     () => visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [visible, page, PAGE_SIZE],
   );
-  // Reset to the first page (and clear row focus) whenever the view changes.
-  useEffect(() => { setPage(1); setFocusedIdx(-1); }, [filter, search, sortKey, sortDir]);
+
+  // Mirror the current page + focus into refs so the keyboard listener can be
+  // attached exactly once and still read the latest values.
+  const pagedRef = useRef<AdminOrderAPI[]>([]);
+  const focusedIdRef = useRef<string | null>(null);
+  useEffect(() => { pagedRef.current = paged; }, [paged]);
+  useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
+
+  // Reset to the first page (and clear row focus / armed cancel) on view change.
+  useEffect(() => { setPage(1); setFocusedId(null); setArmedCancelId(null); }, [filter, search, sortKey, sortDir]);
   // Prune selection to only ids still in the visible set after filter/search changes.
   useEffect(() => {
     if (selected.size === 0) return;
@@ -156,55 +182,73 @@ export default function AdminOrdersPage() {
   // If the list shrank under us, keep the page in range.
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
-  // ── Keyboard navigation J/K on the table ────────────────────────────────
+  // ── Stable action helpers (safe to list in effect deps) ──────────────────
+  const canAct = useCallback((o: AdminOrderAPI) => o.next_statuses.length > 0, []);
+  const toggleOne = useCallback((id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    }), []);
+  const toggleExpand = useCallback((id: string) =>
+    setExpanded((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    }), []);
+  const focusVisibleSearch = useCallback(() => {
+    const desktop = typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+    (desktop ? searchRef.current : mobileSearchRef.current)?.focus();
+  }, []);
+
+  // ── Keyboard navigation J/K on the table (attached once) ─────────────────
   useEffect(() => {
     const el = document.getElementById("orders-table-region");
     if (!el) return;
+    const focusRow = (id: string | null) => {
+      setFocusedId(id);
+      if (id) rowRefs.current.get(id)?.focus();
+    };
+    const move = (delta: number) => {
+      const list = pagedRef.current;
+      if (list.length === 0) return;
+      const cur = focusedIdRef.current;
+      const idx = cur ? list.findIndex((o) => o.id === cur) : -1;
+      const next = idx < 0
+        ? (delta > 0 ? 0 : list.length - 1)
+        : Math.max(0, Math.min(list.length - 1, idx + delta));
+      focusRow(list[next].id);
+    };
     const handleKey = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "/") {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (e.key === "j" || e.key === "ArrowDown") {
-        e.preventDefault();
-        setFocusedIdx((i) => {
-          const next = Math.min(i + 1, paged.length - 1);
-          rowRefs.current[next]?.focus();
-          return next;
-        });
-      } else if (e.key === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setFocusedIdx((i) => {
-          const next = Math.max(i - 1, 0);
-          rowRefs.current[next]?.focus();
-          return next;
-        });
-      } else if ((e.key === "Enter" || e.key === " ") && focusedIdx >= 0) {
-        e.preventDefault();
-        const order = paged[focusedIdx];
-        if (order) toggleExpand(order.id);
-      } else if (e.key === "x" && focusedIdx >= 0) {
-        const order = paged[focusedIdx];
+      if (e.key === "/") { e.preventDefault(); focusVisibleSearch(); return; }
+      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); move(1); }
+      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+      else if (e.key === "Enter" || e.key === " ") {
+        const id = focusedIdRef.current;
+        if (id) { e.preventDefault(); toggleExpand(id); }
+      } else if (e.key === "x") {
+        const id = focusedIdRef.current;
+        const order = id ? pagedRef.current.find((o) => o.id === id) : null;
         if (order && canAct(order)) toggleOne(order.id);
       }
     };
     el.addEventListener("keydown", handleKey);
     return () => el.removeEventListener("keydown", handleKey);
-  }, [paged, focusedIdx]);
+  }, [toggleExpand, toggleOne, canAct, focusVisibleSearch]);
 
   const markBusy = (ids: string[], busy: boolean) =>
     setBusyIds((prev) => {
       const next = new Set(prev);
-      for (const id of ids) busy ? next.add(id) : next.delete(id);
+      for (const id of ids) { if (busy) next.add(id); else next.delete(id); }
       return next;
     });
 
   const transition = useCallback(
-    async (id: string, status: string) => {
+    async (id: string, status: OrderStatus) => {
       if (!token) return;
+      setArmedCancelId(null);
       markBusy([id], true);
       try {
         // Apply the returned updated order immediately so the row reflects the
@@ -223,6 +267,12 @@ export default function AdminOrdersPage() {
     },
     [token, load]
   );
+
+  // Per-row destructive cancel: first tap arms the button, second confirms.
+  const requestCancel = useCallback((id: string) => {
+    if (armedCancelId === id) transition(id, "cancelled");
+    else setArmedCancelId(id);
+  }, [armedCancelId, transition]);
 
   const bulkCancel = useCallback(async () => {
     if (!token || selected.size === 0) return;
@@ -254,27 +304,16 @@ export default function AdminOrdersPage() {
     }
   }, [token, selected, visible, load]);
 
-  const canAct = (o: AdminOrderAPI) => o.next_statuses.length > 0;
   const actionable = visible.filter(canAct);
   const allSelected = actionable.length > 0 && actionable.every((o) => selected.has(o.id));
   const toggleAll  = () => {
     if (allSelected) setSelected(new Set());
     else setSelected(new Set(actionable.map((o) => o.id)));
   };
-  const toggleOne = (id: string) =>
-    setSelected((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) { n.delete(id); } else { n.add(id); }
-      return n;
-    });
-  const toggleExpand = (id: string) =>
-    setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(k); setSortDir(k === "created_at" ? "desc" : "asc"); }
   };
-
-  if (!isAuthenticated || !user?.is_admin) return null;
 
   return (
     <AppShell title="Kitchen">
@@ -284,13 +323,10 @@ export default function AdminOrdersPage() {
           badge={visible.length}
           subtitle="Auto-refreshes every 15s · use J/K to navigate rows"
           actions={
-            <Input
-              ref={searchRef}
-              data-search
-              leadingIcon="search"
-              placeholder="Search orders"
+            <OrderSearch
+              inputRef={searchRef}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               className="w-64 hidden md:block"
             />
           }
@@ -315,19 +351,17 @@ export default function AdminOrdersPage() {
               );
             })}
           </div>
-          <Input
-            data-search
-            leadingIcon="search"
-            placeholder="Search"
+          <OrderSearch
+            inputRef={mobileSearchRef}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
             className="md:hidden flex-1 min-w-[160px]"
           />
           <div className="flex-1" />
           {selected.size > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-ink-soft">{selected.size} selected</span>
-              <Button size="sm" variant="danger" onClick={bulkCancel}>Cancel selected</Button>
+              <Button size="sm" variant="danger" onClick={() => setBulkConfirm(true)}>Cancel selected</Button>
             </div>
           )}
           {refreshing && (
@@ -394,21 +428,21 @@ export default function AdminOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paged.map((order, rowIdx) => {
+                    {paged.map((order) => {
                         const busy       = busyIds.has(order.id);
                         const isSelected = selected.has(order.id);
                         const isExpanded = expanded.has(order.id);
                         const actable    = canAct(order);
-                        const isFocused  = focusedIdx === rowIdx;
-                        const isNew      = order.status === "confirmed";
+                        const isFocused  = focusedId === order.id;
+                        const isNew      = newIds.has(order.id);
                         const ageUrgency = orderAgeUrgency(order.created_at);
                         const ageColor   = ageUrgency === "urgent" ? "text-rose-600 font-semibold" : ageUrgency === "warn" ? "text-amber-600 font-medium" : "text-ink-faint";
                       return (
                         <React.Fragment key={order.id}>
                           <tr
-                            ref={(el) => { rowRefs.current[rowIdx] = el; }}
+                            ref={(el) => { if (el) rowRefs.current.set(order.id, el); else rowRefs.current.delete(order.id); }}
                             tabIndex={0}
-                            onFocus={() => setFocusedIdx(rowIdx)}
+                            onFocus={() => setFocusedId(order.id)}
                             className={`border-b border-line transition-colors outline-none
                               ${isSelected ? "bg-primary/4" : ""}
                               ${isFocused  ? "ring-2 ring-inset ring-primary/40 bg-paper-sunken/60" : "hover:bg-paper-sunken/50"}
@@ -477,17 +511,30 @@ export default function AdminOrdersPage() {
                             <td className="px-4 py-3 text-right">
                               {actable ? (
                                 <div className="inline-flex gap-1 justify-end flex-wrap">
-                                  {order.next_statuses.map((s) => (
-                                    <Button
-                                      key={s}
-                                      size="xs"
-                                      variant={s === "cancelled" ? "danger" : s === "paid" ? "primary" : "secondary"}
-                                      onClick={() => transition(order.id, s)}
-                                      disabled={busy}
-                                    >
-                                      {STATUS_VERB[s] ?? s}
-                                    </Button>
-                                  ))}
+                                  {order.next_statuses.map((s) =>
+                                    s === "cancelled" ? (
+                                      <Button
+                                        key={s}
+                                        size="xs"
+                                        variant="danger"
+                                        onClick={() => requestCancel(order.id)}
+                                        onBlur={() => armedCancelId === order.id && setArmedCancelId(null)}
+                                        disabled={busy}
+                                      >
+                                        {armedCancelId === order.id ? "Confirm?" : "Cancel"}
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        key={s}
+                                        size="xs"
+                                        variant={s === "paid" ? "primary" : "secondary"}
+                                        onClick={() => transition(order.id, s)}
+                                        disabled={busy}
+                                      >
+                                        {STATUS_VERB[s] ?? s}
+                                      </Button>
+                                    )
+                                  )}
                                 </div>
                               ) : (
                                 <span className="text-xs text-ink-faint">—</span>
@@ -560,8 +607,64 @@ export default function AdminOrdersPage() {
             <span className="flex items-center gap-1"><kbd>/</kbd> search</span>
           </div>
         </main>
+
+        {bulkConfirm && (
+          <Modal
+            open
+            onClose={() => setBulkConfirm(false)}
+            title="Cancel selected orders?"
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setBulkConfirm(false)}>Keep them</Button>
+                <Button
+                  variant="danger"
+                  icon="cancel"
+                  onClick={() => { setBulkConfirm(false); bulkCancel(); }}
+                >
+                  Cancel orders
+                </Button>
+              </>
+            }
+          >
+            <p className="text-sm text-ink-soft">
+              This will cancel{" "}
+              <span className="font-semibold text-ink">
+                {Array.from(selected).filter((id) =>
+                  visible.find((o) => o.id === id)?.next_statuses.includes("cancelled"),
+                ).length}
+              </span>{" "}
+              order(s) that can still be cancelled. This can&rsquo;t be undone.
+            </p>
+          </Modal>
+        )}
       </AdminShell>
     </AppShell>
+  );
+}
+
+// ── OrderSearch (single responsive search field, defined once) ───────────────
+
+function OrderSearch({
+  value,
+  onChange,
+  inputRef,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  inputRef: React.Ref<HTMLInputElement>;
+  className?: string;
+}) {
+  return (
+    <Input
+      ref={inputRef}
+      data-search
+      leadingIcon="search"
+      placeholder="Search orders"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={className}
+    />
   );
 }
 

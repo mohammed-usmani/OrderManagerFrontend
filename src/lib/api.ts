@@ -198,11 +198,16 @@ export const api = {
     ),
 
   // Customers (admin)
-  adminListCustomers: (token: string, search?: string) =>
-    apiFetch<CustomerAPI[]>(
-      `/customers${search ? `?search=${encodeURIComponent(search)}` : ""}`,
-      { token },
-    ),
+  adminListCustomers: (
+    token: string,
+    opts: { search?: string; limit?: number; offset?: number } = {},
+  ) => {
+    const p = new URLSearchParams();
+    if (opts.search) p.set("search", opts.search);
+    p.set("limit", String(opts.limit ?? 20));
+    p.set("offset", String(opts.offset ?? 0));
+    return apiFetch<CustomerPageAPI>(`/customers?${p.toString()}`, { token });
+  },
   adminGetCustomerOrders: (token: string, id: string) =>
     apiFetch<CustomerOrderSummaryAPI[]>(`/customers/${id}/orders`, { token }),
   adminCreateCustomer: (token: string, body: CustomerWriteAPI) =>
@@ -418,9 +423,21 @@ export interface MenuItemPatchAPI {
   available?: boolean;
 }
 
+/** Canonical order lifecycle states (mirrors the backend state machine). */
+export type OrderStatus =
+  | "cart"
+  | "confirmed"
+  | "cooking"
+  | "ready"
+  | "served"
+  | "delivered"
+  | "awaiting_payment"
+  | "paid"
+  | "cancelled";
+
 export interface AdminOrderAPI {
   id: string;
-  status: string;
+  status: OrderStatus;
   order_type: string;
   created_at: string;
   confirmed_at: string | null;
@@ -441,7 +458,7 @@ export interface AdminOrderAPI {
   zone_name: string | null;
   floor_name: string | null;
   is_ac: boolean | null;
-  next_statuses: string[];
+  next_statuses: OrderStatus[];
   item_count: number;
   subtotal: number;
   charges: BillCharge[];
@@ -525,7 +542,7 @@ export interface TableAPI {
   seats: number;
   pos_x: number | null;
   pos_y: number | null;
-  shape: "round" | "square" | "rect" | null;
+  shape: TableShape | null;
   qr_token: string;
   status: string;
   active: boolean;
@@ -538,7 +555,7 @@ export interface TableWriteAPI {
   seats?: number;
   pos_x?: number | null;
   pos_y?: number | null;
-  shape?: "round" | "square" | "rect" | null;
+  shape?: TableShape | null;
   status?: string;
   active?: boolean;
 }
@@ -560,13 +577,23 @@ export interface FloorSessionAPI {
   running_total: number;
 }
 
+/** Table render shapes & live statuses (single source of truth for pickers). */
+export type TableShape = "round" | "square" | "rect";
+export type TableStatus = "free" | "occupied" | "needs_bill" | "cleaning";
+
+export const SHAPE_OPTIONS: { value: TableShape; label: string }[] = [
+  { value: "round", label: "Round" },
+  { value: "square", label: "Square" },
+  { value: "rect", label: "Rectangle" },
+];
+
 export interface FloorTableAPI {
   id: string;
   label: string;
   seats: number;
   pos_x: number | null;
   pos_y: number | null;
-  shape: "round" | "square" | "rect" | null;
+  shape: TableShape | null;
   qr_token: string;
   status: string;
   active: boolean;
@@ -661,6 +688,13 @@ export interface CustomerAPI {
   order_count: number;
   last_order_at: string | null;
   created_at: string;
+}
+
+export interface CustomerPageAPI {
+  items: CustomerAPI[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface CustomerWriteAPI {

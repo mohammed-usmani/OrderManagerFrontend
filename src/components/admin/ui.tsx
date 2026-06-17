@@ -9,8 +9,8 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
-  forwardRef,
   useEffect,
   useRef,
 } from "react";
@@ -69,10 +69,15 @@ export function Button({
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
-export const Input = forwardRef<
-  HTMLInputElement,
-  InputHTMLAttributes<HTMLInputElement> & { leadingIcon?: string }
->(function Input({ className = "", leadingIcon, ...rest }, ref) {
+export function Input({
+  className = "",
+  leadingIcon,
+  ref,
+  ...rest
+}: InputHTMLAttributes<HTMLInputElement> & {
+  leadingIcon?: string;
+  ref?: Ref<HTMLInputElement>;
+}) {
   if (leadingIcon) {
     return (
       <div className="relative flex items-center">
@@ -94,7 +99,7 @@ export const Input = forwardRef<
       {...rest}
     />
   );
-});
+}
 
 // ─── Select ──────────────────────────────────────────────────────────────────
 
@@ -236,6 +241,7 @@ export function Pager({
         {from}–{to} of {total}
       </span>
       <div className="flex items-center gap-1.5">
+        <Button size="sm" variant="secondary" icon="first_page" disabled={page <= 1} onClick={() => onPage(1)} aria-label="First page" title="First page" />
         <Button size="sm" variant="secondary" icon="chevron_left" disabled={page <= 1} onClick={() => onPage(page - 1)}>
           Prev
         </Button>
@@ -245,6 +251,7 @@ export function Pager({
         <Button size="sm" variant="secondary" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
           Next
         </Button>
+        <Button size="sm" variant="secondary" icon="last_page" disabled={page >= pageCount} onClick={() => onPage(pageCount)} aria-label="Last page" title="Last page" />
       </div>
     </div>
   );

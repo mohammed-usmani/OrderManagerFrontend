@@ -10,7 +10,9 @@
  * cards guide the caller to *say* what they want rather than tap.
  */
 
+import { useState } from "react";
 import {
+  useVoiceAgent,
   type CanvasState,
   type CustomerCard,
   type MenuItemCard,
@@ -48,6 +50,8 @@ function spiceLevel(label: string | null): number {
 function DishCard({ item, index = 0 }: { item: MenuItemCard; index?: number }) {
   const accent = CATEGORY_ACCENT[item.category] ?? "from-amber-700/40 to-stone-700/30";
   const heat = spiceLevel(item.spice_level);
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImage = !!item.image_url && !imgFailed;
 
   return (
     <article
@@ -55,25 +59,21 @@ function DishCard({ item, index = 0 }: { item: MenuItemCard; index?: number }) {
       style={{ animationDelay: `${Math.min(index, 8) * 55}ms` }}
     >
       <div className={`h-44 relative bg-gradient-to-br ${accent}`}>
-        {item.image_url ? (
+        {showImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={item.image_url}
+            src={item.image_url!}
             alt={item.name}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.07]"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
+            onError={() => setImgFailed(true)}
           />
         ) : (
+          // Same radial-highlight placeholder for both "no image" and "image failed".
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,200,120,0.18),transparent_60%)]" />
         )}
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#140f09] via-[#140f09]/55 to-transparent" />
         <span className="absolute top-3 left-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-on-surface drop-shadow">
           {item.category}
-        </span>
-        <span className="absolute top-3 right-3 rounded-full bg-black/45 px-2 py-0.5 font-mono text-[10px] text-on-surface/80 backdrop-blur-sm ring-1 ring-white/10">
-          {item.id}
         </span>
         {item.popularity != null && item.popularity >= 4.5 && (
           <span className="absolute bottom-3 left-4 inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-2 py-0.5 text-[10px] font-semibold text-tertiary ring-1 ring-tertiary/30 backdrop-blur-sm">
@@ -247,7 +247,10 @@ function OrderSummaryCard({
 // --- Canvas root --------------------------------------------------------
 
 export function Canvas({ canvas }: { canvas: CanvasState }) {
-  if (canvas.kind === "idle") return <IdleState />;
+  const { tableContext } = useVoiceAgent();
+  const dineIn = tableContext !== null;
+  // The idle screen is rendered by the chat page's IdleHero, not here.
+  if (canvas.kind === "idle") return null;
 
   if (canvas.kind === "menu_results") {
     return (
@@ -382,20 +385,25 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
   }
 
   if (canvas.kind === "order_confirmed") {
+    const tableLabel = tableContext?.label;
     return (
       <section className="space-y-6 max-w-2xl mx-auto w-full">
         <div className="flex flex-col items-center text-center gap-3 py-6 reveal">
           <div className="relative">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/40 to-primary/5 flex items-center justify-center ring-2 ring-primary/40 animate-breathe">
               <span className="material-symbols-outlined text-primary text-5xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                local_shipping
+                {dineIn ? "restaurant" : "local_shipping"}
               </span>
             </div>
             <div className="absolute inset-0 rounded-full bg-primary/25 blur-3xl -z-10" />
           </div>
-          <h2 className="font-headline font-semibold text-3xl text-on-surface">Order on its way</h2>
+          <h2 className="font-headline font-semibold text-3xl text-on-surface">
+            {dineIn ? "Sent to the kitchen" : "Order on its way"}
+          </h2>
           <p className="text-on-surface-variant text-sm max-w-sm">
-            The kitchen has it. Fresh off the tandoor and out for delivery in about 30–40 minutes.
+            {dineIn
+              ? `Fresh off the tandoor — we’ll bring it to ${tableLabel ? `Table ${tableLabel}` : "your table"} shortly. Order more any time; pay at the end.`
+              : "The kitchen has it. Fresh off the tandoor and out for delivery in about 30–40 minutes."}
           </p>
         </div>
         <OrderSummaryCard order={canvas.order} title="Confirmed" highlight />
@@ -538,24 +546,6 @@ function EmptyState({ icon, message }: { icon: string; message: string }) {
     <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-white/10">
       <span className="material-symbols-outlined text-on-surface-variant text-4xl mb-3">{icon}</span>
       <p className="text-on-surface-variant text-sm">{message}</p>
-    </div>
-  );
-}
-
-function IdleState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-      <div className="w-16 h-16 rounded-full ember-card flex items-center justify-center">
-        <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-          local_fire_department
-        </span>
-      </div>
-      <div>
-        <h3 className="font-headline font-semibold text-on-surface text-2xl">Talk to Arjun</h3>
-        <p className="text-on-surface-variant text-sm max-w-sm mt-2 leading-relaxed">
-          Tap the mic and ask about the menu or place an order. Everything you say shows up here.
-        </p>
-      </div>
     </div>
   );
 }

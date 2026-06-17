@@ -2,6 +2,10 @@
 
 /** Keyboard shortcut reference overlay — toggled with "?" */
 
+import { useRef } from "react";
+import { ADMIN_ROUTES, shortcutFor } from "@/lib/adminRoutes";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+
 interface ShortcutsHelpProps {
   open: boolean;
   onClose: () => void;
@@ -13,17 +17,11 @@ function buildGroups(isMac: boolean) {
   return [
     {
       group: "Navigation",
-      shortcuts: [
-        { keys: ["G", "D"], label: "Go to Dashboard" },
-        { keys: ["G", "K"], label: "Go to Kitchen" },
-        { keys: ["G", "F"], label: "Go to Floor Plan" },
-        { keys: ["G", "M"], label: "Go to Menu" },
-        { keys: ["G", "A"], label: "Go to Analytics" },
-        { keys: ["G", "C"], label: "Go to Customers" },
-        { keys: ["G", "T"], label: "Go to Tables & QR" },
-        { keys: ["G", "P"], label: "Go to Pricing" },
-        { keys: ["G", "R"], label: "Go to Delivery areas" },
-      ],
+      // Derived from the canonical admin route registry so it can't drift.
+      shortcuts: ADMIN_ROUTES.map((r) => ({
+        keys: shortcutFor(r).split(" "),
+        label: `Go to ${r.label}`,
+      })),
     },
     {
       group: "Global",
@@ -34,27 +32,24 @@ function buildGroups(isMac: boolean) {
         { keys: ["Esc"],    label: "Close / cancel" },
       ],
     },
-    {
-      group: "Tables & Lists",
-      shortcuts: [
-        { keys: ["J"],   label: "Move focus down" },
-        { keys: ["K"],   label: "Move focus up" },
-        { keys: ["↵"],   label: "Primary action on row" },
-        { keys: ["E"],   label: "Edit focused row" },
-        { keys: ["X"],   label: "Select / toggle row" },
-        { keys: ["Spc"], label: "Expand / collapse" },
-      ],
-    },
   ];
 }
 
 export function ShortcutsHelp({ open, onClose, isMac = false }: ShortcutsHelpProps) {
   const SHORTCUT_GROUPS = buildGroups(isMac);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, panelRef);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
       <div className="absolute inset-0 bg-ink/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-line bg-paper-raised shadow-2xl overflow-hidden animate-slide-up">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard shortcuts"
+        className="relative w-full max-w-md rounded-2xl border border-line bg-paper-raised shadow-2xl overflow-hidden animate-slide-up"
+      >
         <header className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div>
             <h2 className="font-headline font-semibold text-ink text-base">Keyboard Shortcuts</h2>

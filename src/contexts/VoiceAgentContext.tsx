@@ -211,7 +211,6 @@ interface VoiceAgentContextValue {
   warningSecondsLeft: number | null;
   disconnectVoice: () => void;
   toggleVoice: () => Promise<void>;
-  clearCanvas: () => void;
   /**
    * Used by tap-to-order flows (non-voice). Pushes the same cart_view
    * state the voice agent would emit after add_to_order.
@@ -273,12 +272,18 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   // Half-duplex engages only after echo is detected (see ECHO_* constants).
   const halfDuplexRef = useRef(false);
   const echoTimesRef = useRef<number[]>([]);
+  // Decays half-duplex back to full-duplex after a quiet window.
+  const halfDuplexDecayRef = useRef<number | null>(null);
+  // Guards the idempotent teardown() against re-entry.
+  const tearingDownRef = useRef(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const micRef = useRef<{ stop: () => void } | null>(null);
   const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const endTimerRef = useRef<number | null>(null);
   const warnTimerRef = useRef<number | null>(null);
+  // Fallback end if the backend's session_end is late after the countdown hits 0.
+  const graceTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
 
@@ -318,8 +323,57 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       clearInterval(warnTimerRef.current);
       warnTimerRef.current = null;
     }
+    if (graceTimerRef.current !== null) {
+      clearTimeout(graceTimerRef.current);
+      graceTimerRef.current = null;
+    }
     setWarningSecondsLeft(null);
   }, []);
+
+  // Stop and release every media resource (mic, stream, player, AudioContext).
+  // Safe to call repeatedly.
+  const releaseMedia = useCallback(() => {
+    micRef.current?.stop();
+    micRef.current = null;
+    stopMicStream();
+    playerRef.current?.stop();
+    playerRef.current = null;
+    closeAudioContext();
+  }, [stopMicStream, closeAudioContext]);
+
+  // The single, idempotent call-teardown path. Every teardown route (manual
+  // disconnect, post-audio end, unmount) funnels through here so they can't
+  // drift apart. Guarded against re-entry so the ws.close() it triggers can't
+  // recurse back in.
+  const teardown = useCallback(() => {
+    if (tearingDownRef.current) return;
+    tearingDownRef.current = true;
+    try {
+      clearWarning();
+      cancelQueue();
+      if (halfDuplexDecayRef.current !== null) {
+        clearTimeout(halfDuplexDecayRef.current);
+        halfDuplexDecayRef.current = null;
+      }
+      if (endTimerRef.current !== null) {
+        clearTimeout(endTimerRef.current);
+        endTimerRef.current = null;
+      }
+      releaseMedia();
+      const ws = wsRef.current;
+      wsRef.current = null;
+      ws?.close();
+      setIsVoiceActive(false);
+      setStatus("disconnected");
+    } finally {
+      tearingDownRef.current = false;
+    }
+  }, [clearWarning, cancelQueue, releaseMedia]);
+
+  // Stable ref to the latest teardown so deferred timers (grace end, unmount)
+  // can call it without being wired into every dependency array.
+  const teardownRef = useRef(teardown);
+  useEffect(() => { teardownRef.current = teardown; }, [teardown]);
 
   const startWarningCountdown = useCallback((seconds: number) => {
     if (warnTimerRef.current !== null) clearInterval(warnTimerRef.current);
@@ -332,6 +386,13 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
             clearInterval(warnTimerRef.current);
             warnTimerRef.current = null;
           }
+          // "Wrapping up…" is shown at 0; if no session_end arrives within a
+          // short grace, end the call ourselves so the mic can't hang open.
+          if (graceTimerRef.current !== null) clearTimeout(graceTimerRef.current);
+          graceTimerRef.current = window.setTimeout(() => {
+            graceTimerRef.current = null;
+            teardownRef.current();
+          }, 8000);
           return 0;
         }
         return s - 1;
@@ -346,7 +407,6 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     []
   );
 
-  const clearCanvas = useCallback(() => setCanvas({ kind: "idle" }), []);
   const setCartView = useCallback(
     (order: OrderCard) => setCanvas({ kind: "cart_view", order }),
     []
@@ -378,39 +438,41 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       const remaining = playerRef.current?.timeRemaining() ?? 0;
       const waited = Date.now() - started;
       if (remaining <= 0 || waited >= MAX_WAIT_MS) {
-        endTimerRef.current = window.setTimeout(() => {
-          // Stop mic, close WS, clear state.
-          micRef.current?.stop();
-          micRef.current = null;
-          stopMicStream();
-          playerRef.current?.stop();
-          playerRef.current = null;
-          closeAudioContext();
-          wsRef.current?.close();
-          wsRef.current = null;
-          setIsVoiceActive(false);
-          setStatus("disconnected");
-        }, GRACE_MS);
+        // Route the end through the shared idempotent teardown so it can't race
+        // a manual disconnect / unmount.
+        endTimerRef.current = window.setTimeout(() => { teardown(); }, GRACE_MS);
         return;
       }
       endTimerRef.current = window.setTimeout(tick, POLL_MS);
     };
     tick();
-  }, [closeAudioContext, stopMicStream]);
+  }, [teardown]);
 
   const handleUIEvent = useCallback(
     (event: string, data: unknown) => {
+      // Lightweight validation: the payloads come off the wire and are
+      // dereferenced deeply by the canvas, so reject malformed frames here
+      // (log + ignore) rather than letting them throw inside render.
+      const isObj = (x: unknown): x is Record<string, unknown> =>
+        typeof x === "object" && x !== null;
+      const isOrder = (x: unknown): x is OrderCard =>
+        isObj(x) && typeof x.id === "string" && Array.isArray(x.items) && typeof x.total === "number";
+      const bad = (why: string) => console.warn(`[voice] ignoring ${event} ui_event: ${why}`);
+
       switch (event) {
         case "menu_results": {
+          if (!isObj(data) || !Array.isArray((data as { items?: unknown }).items)) return bad("no items[]");
           const d = data as { title: string; items: MenuItemCard[] };
-          setCanvas({ kind: "menu_results", title: d.title, items: d.items });
+          setCanvas({ kind: "menu_results", title: d.title ?? "", items: d.items });
           break;
         }
         case "cart_view": {
-          setCanvas({ kind: "cart_view", order: data as OrderCard });
+          if (!isOrder(data)) return bad("not an order");
+          setCanvas({ kind: "cart_view", order: data });
           break;
         }
         case "orders_list": {
+          if (!isObj(data) || !Array.isArray((data as { orders?: unknown }).orders)) return bad("no orders[]");
           const d = data as {
             title: string;
             orders: OrderCard[];
@@ -418,21 +480,24 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           };
           setCanvas({
             kind: "orders_list",
-            title: d.title,
+            title: d.title ?? "",
             orders: d.orders,
-            counts: d.counts,
+            counts: d.counts ?? {},
           });
           break;
         }
         case "order_confirmed": {
-          setCanvas({ kind: "order_confirmed", order: data as OrderCard });
+          if (!isOrder(data)) return bad("not an order");
+          setCanvas({ kind: "order_confirmed", order: data });
           break;
         }
         case "customer_card": {
-          setCanvas({ kind: "customer_card", customer: data as CustomerCard });
+          if (!isObj(data) || typeof (data as { id?: unknown }).id !== "string") return bad("no customer id");
+          setCanvas({ kind: "customer_card", customer: data as unknown as CustomerCard });
           break;
         }
         case "delivery_check": {
+          if (!isObj(data)) return bad("not an object");
           const d = data as {
             query: string;
             serviceable: boolean;
@@ -440,30 +505,30 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           };
           setCanvas({
             kind: "delivery_check",
-            query: d.query,
-            serviceable: d.serviceable,
-            matched: d.matched,
+            query: d.query ?? "",
+            serviceable: !!d.serviceable,
+            matched: d.matched ?? null,
           });
           break;
         }
         case "bill_requested": {
-          const d = (data as { table_label?: string }) ?? {};
+          const d = (isObj(data) ? data : {}) as { table_label?: string };
           setCanvas({ kind: "bill_requested", tableLabel: d.table_label });
           break;
         }
         case "time_warning": {
-          const secs = (data as { seconds_left?: number })?.seconds_left ?? 60;
+          const secs = (isObj(data) ? (data as { seconds_left?: number }).seconds_left : undefined) ?? 60;
           startWarningCountdown(secs);
           break;
         }
         case "session_end": {
-          const d = (data as { reason?: string; message?: string }) ?? {};
+          const d = (isObj(data) ? data : {}) as { reason?: string; message?: string };
+          const reason = d.reason ?? "goodbye";
           clearWarning();
-          setCanvas({
-            kind: "session_end",
-            reason: d.reason ?? "goodbye",
-            message: d.message,
-          });
+          // End-of-visit reasons clear the dine-in table binding so a later
+          // parcel call can't inherit a stale table.
+          if (/settle|bill|goodbye|paid/i.test(reason)) setTableContext(null);
+          setCanvas({ kind: "session_end", reason, message: d.message });
           scheduleEndAfterAudio();
           break;
         }
@@ -472,7 +537,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           break;
       }
     },
-    [scheduleEndAfterAudio, startWarningCountdown, clearWarning]
+    [scheduleEndAfterAudio, startWarningCountdown, clearWarning, setTableContext]
   );
 
   const handleMessage = useCallback(
@@ -506,6 +571,16 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
             if (recent.length >= ECHO_THRESHOLD) {
               halfDuplexRef.current = true;
               setEchoSuppressed(true);
+              // Decay back to full-duplex after a quiet window so a single noisy
+              // stretch doesn't kill barge-in for the rest of the call.
+              if (halfDuplexDecayRef.current !== null)
+                clearTimeout(halfDuplexDecayRef.current);
+              halfDuplexDecayRef.current = window.setTimeout(() => {
+                halfDuplexRef.current = false;
+                echoTimesRef.current = [];
+                setEchoSuppressed(false);
+                halfDuplexDecayRef.current = null;
+              }, ECHO_WINDOW_MS * 2);
             }
           }
         }
@@ -521,23 +596,8 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   // --- Voice connection ------------------------------------------------
 
   const disconnectVoice = useCallback(() => {
-    clearWarning();
-    cancelQueue();
-    if (endTimerRef.current !== null) {
-      clearTimeout(endTimerRef.current);
-      endTimerRef.current = null;
-    }
-    micRef.current?.stop();
-    micRef.current = null;
-    stopMicStream();
-    playerRef.current?.stop();
-    playerRef.current = null;
-    closeAudioContext();
-    wsRef.current?.close();
-    wsRef.current = null;
-    setIsVoiceActive(false);
-    setStatus("disconnected");
-  }, [clearWarning, closeAudioContext, cancelQueue, stopMicStream]);
+    teardown();
+  }, [teardown]);
 
   const startMic = useCallback(async (audioCtx: AudioContext, stream: MediaStream) => {
     const mic = await startMicCapture((pcmChunk) => {
@@ -559,6 +619,9 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
   // Opens a connection attempt (used for the initial tap and for queue retries).
   const connect = useCallback(async () => {
     setStatus("connecting");
+    // Clear any prior session_end / error screen so a fresh call starts clean
+    // (but keep the queued "busy" message during a 4003 retry).
+    if (!queuedRef.current) setCanvas({ kind: "idle" });
     // Each call starts in full-duplex (barge-in on); echo detection may flip it.
     halfDuplexRef.current = false;
     echoTimesRef.current = [];
@@ -573,8 +636,19 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext;
       const audioCtx = new Ctx();
-      audioCtx.resume().catch(() => {});
       audioCtxRef.current = audioCtx;
+      await audioCtx.resume().catch(() => {});
+      if (audioCtx.state !== "running") {
+        setCanvas({
+          kind: "session_end",
+          reason: "mic_error",
+          message:
+            "Audio is blocked on this device. Check that it isn't muted / in silent mode, then tap the mic again.",
+        });
+        closeAudioContext();
+        setStatus("disconnected");
+        return;
+      }
     } catch {
       setCanvas({
         kind: "session_end",
@@ -666,12 +740,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       clearWarning();
       setStatus("disconnected");
       setIsVoiceActive(false);
-      micRef.current?.stop();
-      micRef.current = null;
-      stopMicStream();
-      playerRef.current?.stop();
-      playerRef.current = null;
-      closeAudioContext();
+      releaseMedia();
       wsRef.current = null;
       // 4003 = all global voice slots are busy. Queue: auto-retry until one
       // frees up (the Gemini free tier allows only a few concurrent sessions).
@@ -691,10 +760,21 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           });
           retryTimerRef.current = window.setTimeout(() => {
             retryTimerRef.current = null;
-            if (queuedRef.current) {
+            // Only reconnect if we're still queued AND the user is actually on
+            // the chat page and the tab is visible — otherwise drop the queue so
+            // we don't re-acquire the mic app-wide after they've navigated away.
+            const onChat =
+              typeof window !== "undefined" &&
+              window.location.pathname.startsWith("/chat");
+            const visible =
+              typeof document === "undefined" ||
+              document.visibilityState === "visible";
+            if (queuedRef.current && onChat && visible) {
               queuedRef.current = false;
               setQueued(false);
               connectRef.current();
+            } else {
+              cancelQueue();
             }
           }, DELAY_MS);
         } else {
@@ -709,7 +789,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       }
     };
     ws.onerror = () => ws.close();
-  }, [startMic, handleMessage, token, disconnectVoice, clearWarning, closeAudioContext, cancelQueue, stopMicStream]);
+  }, [startMic, handleMessage, token, disconnectVoice, clearWarning, closeAudioContext, cancelQueue, stopMicStream, releaseMedia]);
 
   // Keep a stable ref so queue retries can re-invoke the latest connect().
   connectRef.current = connect;
@@ -725,23 +805,9 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     await connect();
   }, [isVoiceActive, status, disconnectVoice, connect]);
 
+  // Run the shared teardown exactly once on unmount.
   useEffect(() => {
-    return () => {
-      if (endTimerRef.current !== null) {
-        clearTimeout(endTimerRef.current);
-      }
-      if (retryTimerRef.current !== null) {
-        clearTimeout(retryTimerRef.current);
-      }
-      wsRef.current?.close();
-      micRef.current?.stop();
-      micStreamRef.current?.getTracks().forEach((t) => t.stop());
-      playerRef.current?.stop();
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close().catch(() => {});
-        audioCtxRef.current = null;
-      }
-    };
+    return () => { teardownRef.current(); };
   }, []);
 
   const value: VoiceAgentContextValue = {
@@ -754,7 +820,6 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
     warningSecondsLeft,
     disconnectVoice,
     toggleVoice,
-    clearCanvas,
     setCartView,
     tableContext,
     setTableContext,

@@ -21,7 +21,7 @@ export function AppShell({ children, title }: AppShellProps) {
       <Sidebar />
 
       {/* Mobile header - hidden on desktop where sidebar has the brand */}
-      <header className="md:hidden flex justify-between items-center px-5 py-4 w-full fixed top-0 z-50 bg-black/40 backdrop-blur-2xl border-b border-white/5">
+      <header className="md:hidden flex justify-between items-center px-5 w-full fixed top-0 z-50 h-[var(--app-mobile-header-h)] bg-black/40 backdrop-blur-2xl border-b border-white/5">
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-primary text-2xl">
             restaurant

@@ -54,19 +54,6 @@ function concat(...arrays: Uint8Array[]): Uint8Array {
   return result;
 }
 
-function encodeString(str: string): Uint8Array {
-  return new TextEncoder().encode(str);
-}
-
-// --- Encode a text frame for sending to Pipecat ---
-
-export function encodeTextFrame(text: string): Uint8Array {
-  // TextFrame: text=3(string)
-  const textInner = encodeLengthDelimited(3, encodeString(text));
-  // Frame: text=1 (TextFrame)
-  return encodeLengthDelimited(1, textInner);
-}
-
 // --- Encode an audio frame for sending to Pipecat ---
 
 export function encodeAudioFrame(

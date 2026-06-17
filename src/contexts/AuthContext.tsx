@@ -23,7 +23,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 function decodeJwt(token: string): AuthUser | null {
   try {
     // base64url → base64 → JSON
-    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const b64 = part + "=".repeat((4 - (part.length % 4)) % 4);
     const payload = JSON.parse(new TextDecoder().decode(
       Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
     ));
@@ -86,7 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<AuthUser> => {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Match apiFetch so ngrok tunnels return JSON, not the interstitial HTML.
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(body),
     });
     if (!res.ok) {

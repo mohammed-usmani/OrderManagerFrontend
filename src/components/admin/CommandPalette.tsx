@@ -9,6 +9,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ADMIN_ROUTES, shortcutFor } from "@/lib/adminRoutes";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface Command {
   id: string;
@@ -31,6 +33,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, panelRef);
 
   const nav = useCallback(
     (href: string) => {
@@ -41,20 +45,20 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   );
 
   const COMMANDS: Command[] = [
-    // Navigation
-    { id: "dashboard",      group: "Navigate",      label: "Dashboard",       description: "Overview & KPIs",               icon: "dashboard",        shortcut: "G D", action: () => nav("/admin") },
-    { id: "kitchen",        group: "Navigate",      label: "Kitchen",         description: "Live order queue",              icon: "soup_kitchen",     shortcut: "G K", action: () => nav("/admin/orders") },
-    { id: "floor",          group: "Navigate",      label: "Floor Plan",      description: "Table layout & status",         icon: "grid_view",        shortcut: "G F", action: () => nav("/admin/floor") },
-    { id: "menu",           group: "Navigate",      label: "Menu",            description: "Items, categories & pricing",   icon: "restaurant_menu",  shortcut: "G M", action: () => nav("/admin/menu") },
-    { id: "analytics",      group: "Navigate",      label: "Analytics",       description: "Revenue & trends",              icon: "monitoring",       shortcut: "G A", action: () => nav("/admin/analytics") },
-    { id: "customers",      group: "Navigate",      label: "Customers",       description: "Guest records & history",       icon: "groups",           shortcut: "G C", action: () => nav("/admin/customers") },
-    { id: "tables",         group: "Navigate",      label: "Tables & QR",     description: "Manage tables and QR codes",    icon: "table_restaurant", shortcut: "G T", action: () => nav("/admin/tables") },
-    { id: "pricing",        group: "Navigate",      label: "Pricing",         description: "Dynamic pricing rules",         icon: "payments",         shortcut: "G P", action: () => nav("/admin/pricing") },
-    { id: "service-areas",  group: "Navigate",      label: "Delivery Areas",  description: "Service zone configuration",    icon: "pin_drop",         shortcut: "G R", action: () => nav("/admin/service-areas") },
+    // Navigation — derived from the canonical admin route registry.
+    ...ADMIN_ROUTES.map((r) => ({
+      id: r.href,
+      group: "Navigate",
+      label: r.label,
+      description: r.description,
+      icon: r.icon,
+      shortcut: shortcutFor(r),
+      action: () => nav(r.href),
+    })),
     // Quick actions
-    { id: "new-order",      group: "Quick Actions", label: "New order",       description: "Open order creation form",      icon: "add_circle",                  action: () => nav("/admin/orders") },
-    { id: "public-home",    group: "Quick Actions", label: "Public site",     description: "Open customer-facing homepage", icon: "open_in_new",                 action: () => nav("/") },
-    { id: "profile",        group: "Quick Actions", label: "My profile",      description: "Account settings",             icon: "person",                      action: () => nav("/profile") },
+    { id: "view-kitchen",   group: "Quick Actions", label: "View kitchen queue", description: "Open the live order queue",     icon: "soup_kitchen",                action: () => nav("/admin/orders") },
+    { id: "public-home",    group: "Quick Actions", label: "Public site",        description: "Open customer-facing homepage", icon: "open_in_new",                 action: () => nav("/") },
+    { id: "profile",        group: "Quick Actions", label: "My profile",         description: "Account settings",              icon: "person",                      action: () => nav("/profile") },
   ];
 
   // Fuzzy filter
@@ -123,8 +127,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
       {/* Panel */}
       <div
+        ref={panelRef}
         className="relative w-full max-w-xl rounded-2xl border border-line bg-paper-raised shadow-2xl overflow-hidden animate-slide-up"
         role="dialog"
+        aria-modal="true"
         aria-label="Command palette"
       >
         {/* Search input */}
@@ -166,7 +172,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       role="option"
                       aria-selected={isActive}
                       onClick={cmd.action}
-                      onMouseEnter={() => setCursor(idx)}
+                      onPointerMove={() => setCursor(idx)}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isActive ? "bg-primary/8 text-ink" : "text-ink-soft hover:bg-paper-sunken"}`}
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? "bg-primary/10" : "bg-paper-sunken"}`}>

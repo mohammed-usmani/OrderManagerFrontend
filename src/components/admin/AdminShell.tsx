@@ -16,7 +16,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="min-h-full bg-paper text-ink">
       {/* Content column — sized to leave room for the dark sidebar on desktop.
           pt-16 on mobile clears the fixed AppShell mobile header. */}
-      <div className="min-h-dvh flex flex-col pt-16 md:pt-0">
+      <div className="min-h-dvh flex flex-col pt-[var(--app-mobile-header-h)] md:pt-0">
         {children}
       </div>
     </div>
