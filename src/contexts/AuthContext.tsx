@@ -74,15 +74,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const res = await fetch(`${API_URL}/auth/login`, {
+  /**
+   * Shared fetch helper for auth endpoints (login / register). Routes through
+   * the same API_URL base so ngrok-skip headers or URL overrides are applied
+   * consistently — unlike the old per-route raw fetch calls.
+   */
+  const authRequest = async (
+    path: string,
+    body: Record<string, string>,
+    defaultError: string,
+  ): Promise<AuthUser> => {
+    const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Login failed" }));
-      throw new Error(err.detail || "Login failed");
+      const err = await res.json().catch(() => ({ detail: defaultError }));
+      throw new Error(err.detail || defaultError);
     }
     const data = await res.json();
     const decoded = decodeJwt(data.access_token);
@@ -93,24 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return decoded;
   };
 
-  const register = async (email: string, password: string, name: string) => {
-    const res = await fetch(`${API_URL}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Registration failed" }));
-      throw new Error(err.detail || "Registration failed");
-    }
-    const data = await res.json();
-    const decoded = decodeJwt(data.access_token);
-    if (!decoded) throw new Error("Invalid token received");
-    setToken(data.access_token);
-    setUser(decoded);
-    localStorage.setItem("oracle_token", data.access_token);
-    return decoded;
-  };
+  const login = (email: string, password: string) =>
+    authRequest("/auth/login", { email, password }, "Login failed");
+
+  const register = (email: string, password: string, name: string) =>
+    authRequest("/auth/register", { email, password, name }, "Registration failed");
 
   const logout = () => {
     setToken(null);

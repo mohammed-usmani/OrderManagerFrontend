@@ -90,21 +90,25 @@ export function createAudioPlayer(
   let nextStartTime = 0;
 
   function play(pcmInt16: Uint8Array, numChannels: number = 1) {
+    try {
     // Mobile contexts can drift back to "suspended"; nudge it before playing.
     if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+
+    // Guard against malformed frames that report 0 channels.
+    const safeChannels = Math.max(1, numChannels);
 
     const int16 = new Int16Array(
       pcmInt16.buffer,
       pcmInt16.byteOffset,
       pcmInt16.byteLength / 2
     );
-    const numSamples = int16.length / numChannels;
-    const buffer = audioCtx.createBuffer(numChannels, numSamples, sampleRate);
+    const numSamples = int16.length / safeChannels;
+    const buffer = audioCtx.createBuffer(safeChannels, numSamples, sampleRate);
 
-    for (let ch = 0; ch < numChannels; ch++) {
+    for (let ch = 0; ch < safeChannels; ch++) {
       const channelData = buffer.getChannelData(ch);
       for (let i = 0; i < numSamples; i++) {
-        channelData[i] = int16[i * numChannels + ch] / 32768;
+        channelData[i] = int16[i * safeChannels + ch] / 32768;
       }
     }
 
@@ -116,6 +120,9 @@ export function createAudioPlayer(
     const startTime = Math.max(now, nextStartTime);
     source.start(startTime);
     nextStartTime = startTime + buffer.duration;
+    } catch (err) {
+      console.warn("[audio] dropped malformed audio frame:", err);
+    }
   }
 
   function stop() {

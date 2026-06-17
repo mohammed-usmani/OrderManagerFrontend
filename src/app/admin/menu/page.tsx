@@ -54,6 +54,7 @@ export default function AdminMenuPage() {
   const [editingCell, setEditingCell] = useState<{
     id: string;
     field: EditableField;
+    original: string | number | null;
   } | null>(null);
   const [cellDraft, setCellDraft] = useState("");
 
@@ -193,27 +194,49 @@ export default function AdminMenuPage() {
     field: EditableField,
     current: string | number | null,
   ) => {
-    setEditingCell({ id, field });
+    setEditingCell({ id, field, original: current });
     setCellDraft(current == null ? "" : String(current));
   };
 
   const commitCellEdit = async () => {
     if (!editingCell) return;
-    const { id, field } = editingCell;
-    setEditingCell(null);
+    const { id, field, original } = editingCell;
     const trimmed = cellDraft.trim();
+
+    // Skip the PATCH entirely when nothing changed.
+    if (trimmed === (original == null ? "" : String(original))) {
+      setEditingCell(null);
+      return;
+    }
+
     const body: MenuItemPatchAPI = {};
     if (field === "price") {
       const n = parseFloat(trimmed);
-      if (!isNaN(n)) body.price = n;
+      if (!isFinite(n) || n <= 0) {
+        // Invalid price — stay in edit mode with a visual cue via the input
+        // (the caller's onBlur will re-trigger, so we guard re-entry with
+        // editingCell being non-null).
+        return;
+      }
+      body.price = n;
     } else if (field === "name") {
-      if (trimmed) body.name = trimmed;
+      if (!trimmed) {
+        // Required field blanked — keep editing.
+        return;
+      }
+      body.name = trimmed;
     } else if (field === "category") {
-      if (trimmed) body.category = trimmed;
+      if (!trimmed) {
+        // Required field blanked — keep editing.
+        return;
+      }
+      body.category = trimmed;
     } else {
       // spice_level or serving can be cleared
       (body as Record<string, string | null>)[field] = trimmed || null;
     }
+
+    setEditingCell(null);
     if (Object.keys(body).length > 0) await patchItem(id, body);
   };
 
@@ -591,7 +614,13 @@ function EditableCell({
       onClick={onBeginEdit}
       className={`px-4 py-3 cursor-text group/cell relative hover:bg-paper-sunken/50 transition-colors ${right ? "text-right" : ""}`}
     >
-      {children}
+      <span className="inline-flex items-center gap-1.5">
+        {children}
+        {/* Pencil glyph: only visible on hover to signal the cell is editable */}
+        <span className="material-symbols-outlined text-[12px] text-ink-faint opacity-0 group-hover/cell:opacity-100 transition-opacity shrink-0 select-none" aria-hidden="true">
+          edit
+        </span>
+      </span>
     </td>
   );
 }

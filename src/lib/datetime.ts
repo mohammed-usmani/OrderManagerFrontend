@@ -30,6 +30,33 @@ export function formatDateTime(iso: string | null | undefined): string {
   return formatDate(iso);
 }
 
+/**
+ * Returns a short human-readable age string (e.g. "3m", "1h 12m") from an
+ * ISO timestamp to now. Used for KDS order-age display.
+ */
+export function formatAge(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const ms = Date.now() - parseBackendIso(iso).getTime();
+  if (ms < 0) return "just now";
+  const totalMinutes = Math.floor(ms / 60_000);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+/**
+ * Returns an SLA urgency level based on order age in minutes.
+ * Used to drive amber/red colouring on the KDS.
+ */
+export function orderAgeUrgency(iso: string | null | undefined): "ok" | "warn" | "urgent" {
+  if (!iso) return "ok";
+  const minutes = Math.floor((Date.now() - parseBackendIso(iso).getTime()) / 60_000);
+  if (minutes >= 20) return "urgent";
+  if (minutes >= 10) return "warn";
+  return "ok";
+}
+
 /** IANA timezone string for the user, e.g. "Asia/Kolkata". */
 export function getUserTimezone(): string {
   try {

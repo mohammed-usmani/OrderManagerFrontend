@@ -77,10 +77,13 @@ function integerToIndianWords(n: number): string {
 }
 
 export function amountInWords(amount: number): string {
-  const rupees = Math.floor(Math.abs(amount));
-  const paise = Math.round((Math.abs(amount) - rupees) * 100);
+  const negative = amount < 0;
+  // Work in integer paise to avoid floating-point carry (e.g. 9.995 → 100 paise).
+  const totalPaise = Math.round(Math.abs(amount) * 100);
+  const rupees = Math.floor(totalPaise / 100);
+  const paise  = totalPaise % 100;
 
-  let out = `Rupees ${integerToIndianWords(rupees) || "Zero"}`;
+  let out = (negative ? "Minus " : "") + `Rupees ${integerToIndianWords(rupees) || "Zero"}`;
   if (paise > 0) {
     out += ` and ${twoDigits(paise)} Paise`;
   }

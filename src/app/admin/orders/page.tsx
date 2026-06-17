@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type AdminOrderAPI } from "@/lib/api";
-import { formatDate } from "@/lib/datetime";
+import { formatDate, formatAge, orderAgeUrgency } from "@/lib/datetime";
 import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -23,10 +23,17 @@ const FILTER_LABEL: Record<Filter, string> = {
   paid: "Paid", cancelled: "Cancelled",
 };
 
+// Every filter gets an active-state accent so the chip style is consistent.
 const FILTER_ACCENT: Record<string, string> = {
+  active:    "bg-primary text-on-primary border-primary/40 shadow-sm",
+  all:       "bg-ink text-paper border-ink/40 shadow-sm",
   confirmed: "text-primary border-primary/30 bg-primary/8",
   cooking:   "text-amber-700 border-amber-300/50 bg-amber-50",
   ready:     "text-sky-700 border-sky-300/50 bg-sky-50",
+  served:    "text-emerald-700 border-emerald-300/50 bg-emerald-50",
+  delivered: "text-violet-700 border-violet-300/50 bg-violet-50",
+  paid:      "text-emerald-700 border-emerald-300/50 bg-emerald-50",
+  cancelled: "text-rose-700 border-rose-300/50 bg-rose-50",
 };
 
 const STATUS_VERB: Record<string, string> = {
@@ -200,8 +207,14 @@ export default function AdminOrdersPage() {
       if (!token) return;
       markBusy([id], true);
       try {
-        await api.adminUpdateOrderStatus(token, id, status);
-        await load();
+        // Apply the returned updated order immediately so the row reflects the
+        // new status without waiting for the next full-list refresh.
+        const updated = await api.adminUpdateOrderStatus(token, id, status);
+        if (updated) {
+          setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+        } else {
+          await load();
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -249,7 +262,11 @@ export default function AdminOrdersPage() {
     else setSelected(new Set(actionable.map((o) => o.id)));
   };
   const toggleOne = (id: string) =>
-    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) { n.delete(id); } else { n.add(id); }
+      return n;
+    });
   const toggleExpand = (id: string) =>
     setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleSort = (k: SortKey) => {
@@ -289,9 +306,7 @@ export default function AdminOrdersPage() {
                   onClick={() => setFilter(f)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                     filter === f
-                      ? accent
-                        ? `border ${accent}`
-                        : "bg-primary text-on-primary border-primary/40 shadow-sm"
+                      ? `border ${accent ?? "bg-primary text-on-primary border-primary/40 shadow-sm"}`
                       : "text-ink-soft border-transparent hover:bg-paper-sunken hover:text-ink"
                   }`}
                 >
@@ -328,7 +343,14 @@ export default function AdminOrdersPage() {
           {error && (
             <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]">error</span>
-              {error}
+              <span className="flex-1">{error}</span>
+              <button
+                onClick={() => setError("")}
+                className="p-0.5 rounded-md hover:bg-rose-100 transition-colors shrink-0"
+                aria-label="Dismiss error"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
             </div>
           )}
 
@@ -373,12 +395,14 @@ export default function AdminOrdersPage() {
                   </thead>
                   <tbody>
                     {paged.map((order, rowIdx) => {
-                      const busy       = busyIds.has(order.id);
-                      const isSelected = selected.has(order.id);
-                      const isExpanded = expanded.has(order.id);
-                      const actable    = canAct(order);
-                      const isFocused  = focusedIdx === rowIdx;
-                      const isNew      = order.status === "confirmed";
+                        const busy       = busyIds.has(order.id);
+                        const isSelected = selected.has(order.id);
+                        const isExpanded = expanded.has(order.id);
+                        const actable    = canAct(order);
+                        const isFocused  = focusedIdx === rowIdx;
+                        const isNew      = order.status === "confirmed";
+                        const ageUrgency = orderAgeUrgency(order.created_at);
+                        const ageColor   = ageUrgency === "urgent" ? "text-rose-600 font-semibold" : ageUrgency === "warn" ? "text-amber-600 font-medium" : "text-ink-faint";
                       return (
                         <React.Fragment key={order.id}>
                           <tr
@@ -441,7 +465,11 @@ export default function AdminOrdersPage() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-ink-soft tabular-nums text-sm">{order.item_count}</td>
-                            <td className="px-4 py-3 text-ink-faint text-xs whitespace-nowrap">{formatDate(order.created_at)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap" title={formatDate(order.created_at)}>
+                              <span className={`text-xs tabular-nums ${ageColor}`}>
+                                {formatAge(order.created_at)}
+                              </span>
+                            </td>
                             <td className="px-4 py-3 text-right font-semibold text-ink tabular-nums">{formatPrice(order.total)}</td>
                             <td className="px-4 py-3">
                               <StatusChip status={order.status} />

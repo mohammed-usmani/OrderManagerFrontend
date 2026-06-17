@@ -4,26 +4,25 @@
  * useAdminKeyboard — global keyboard shortcut system for the admin panel.
  *
  * Shortcuts:
- *   Cmd+K / Ctrl+K  → open command palette
- *   G then D        → go to Dashboard
- *   G then K        → go to Kitchen
- *   G then F        → go to Floor
- *   G then M        → go to Menu
- *   G then A        → go to Analytics
- *   G then C        → go to Customers
- *   G then T        → go to Tables & QR
- *   G then P        → go to Pricing
- *   G then R        → go to Delivery areas
- *   ?               → open help overlay (shows all shortcuts)
+ *   Cmd+K / Ctrl+K  → open command palette (closing help if open)
+ *   ?               → open help overlay (closing palette if open)
+ *   Escape          → close whichever overlay is open
+ *   G then D/K/F/M/A/C/T/P/R → navigate to the matching admin route
  *   /               → focus page search input (if present)
  *
- * Usage:
- *   const { paletteOpen, closePalette } = useAdminKeyboard();
- *   <CommandPalette open={paletteOpen} onClose={closePalette} />
+ * Fixes applied:
+ *   - gLeader and timer are stored in refs, not state, so the listener
+ *     registers exactly once and never re-subscribes on every keypress.
+ *   - Overlays are modelled as one activeOverlay union so Cmd+K and ?
+ *     cannot leave two full-screen overlays open simultaneously.
+ *   - Single-key shortcuts bail out when any [role=dialog] is open,
+ *     preventing them from firing inside modals.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
+type Overlay = "palette" | "help" | null;
 
 type AdminRoute =
   | "dashboard" | "kitchen" | "floor" | "menu" | "analytics"
@@ -55,25 +54,28 @@ const ROUTE_MAP: Record<AdminRoute, string> = {
 
 export function useAdminKeyboard() {
   const router = useRouter();
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay>(null);
 
-  // Track the "G" leader key press for compound shortcuts
-  const [gLeader, setGLeader] = useState(false);
-  const gLeaderTimer = useState<ReturnType<typeof setTimeout> | null>(null);
+  // Use refs for transient gesture state so the listener never re-registers.
+  const gLeaderRef  = useRef(false);
+  const gTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearGLeader = useCallback(() => {
-    setGLeader(false);
-    if (gLeaderTimer[0]) clearTimeout(gLeaderTimer[0]);
-  }, [gLeaderTimer]);
+    gLeaderRef.current = false;
+    if (gTimerRef.current) {
+      clearTimeout(gTimerRef.current);
+      gTimerRef.current = null;
+    }
+  }, []);
 
-  const openPalette = useCallback(() => {
-    clearGLeader();
-    setPaletteOpen(true);
-  }, [clearGLeader]);
+  // Expose stable helpers so consumers can open/close without re-renders.
+  const openPalette  = useCallback(() => { clearGLeader(); setOverlay("palette"); }, [clearGLeader]);
+  const closePalette = useCallback(() => setOverlay((v) => (v === "palette" ? null : v)), []);
+  const closeHelp    = useCallback(() => setOverlay((v) => (v === "help"    ? null : v)), []);
 
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
-  const closeHelp    = useCallback(() => setHelpOpen(false), []);
+  // router is stable across renders in Next 13+, safe to include once.
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
 
   useEffect(() => {
     const isEditing = () => {
@@ -87,34 +89,36 @@ export function useAdminKeyboard() {
       );
     };
 
+    const isInsideDialog = () =>
+      !!document.activeElement?.closest('[role="dialog"]');
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K / Ctrl+K — always active
+      // Cmd+K / Ctrl+K — always active, toggles palette and closes help.
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setPaletteOpen((v) => !v);
+        setOverlay((v) => (v === "palette" ? null : "palette"));
         return;
       }
 
-      // Everything else: skip when typing in a field
-      if (isEditing()) return;
+      // All other shortcuts: skip while typing in a field or inside a dialog.
+      if (isEditing() || isInsideDialog()) return;
 
-      // Escape: close overlays
+      // Escape: close the active overlay.
       if (e.key === "Escape") {
-        setPaletteOpen(false);
-        setHelpOpen(false);
+        setOverlay(null);
         clearGLeader();
         return;
       }
 
-      // "?" — help overlay
+      // "?" — toggle help, closing palette if open.
       if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        setHelpOpen((v) => !v);
+        setOverlay((v) => (v === "help" ? null : "help"));
         clearGLeader();
         return;
       }
 
-      // "/" — focus the first search input on the page
+      // "/" — focus the first search input on the page.
       if (e.key === "/" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         clearGLeader();
@@ -125,31 +129,39 @@ export function useAdminKeyboard() {
         return;
       }
 
-      // "G" leader for goto shortcuts
+      // "G" leader for goto shortcuts.
       if (e.key === "g" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        setGLeader(true);
-        // Auto-cancel after 1.5s
-        const t = setTimeout(() => setGLeader(false), 1500);
-        gLeaderTimer[0] = t;
+        gLeaderRef.current = true;
+        if (gTimerRef.current) clearTimeout(gTimerRef.current);
+        gTimerRef.current = setTimeout(() => { gLeaderRef.current = false; }, 1500);
         return;
       }
 
-      // G + letter combo
-      if (gLeader) {
+      // G + letter combo.
+      if (gLeaderRef.current) {
         const route = GOTO_MAP[e.key.toLowerCase()];
         if (route) {
           e.preventDefault();
-          router.push(ROUTE_MAP[route]);
+          routerRef.current.push(ROUTE_MAP[route]);
         }
         clearGLeader();
         return;
       }
     };
 
+    // Register once — no deps that change.
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [router, gLeader, clearGLeader, gLeaderTimer]);
+  }, [clearGLeader]); // clearGLeader is stable (no-dep useCallback)
 
-  return { paletteOpen, closePalette, helpOpen, closeHelp, openPalette };
+  return {
+    paletteOpen: overlay === "palette",
+    helpOpen:    overlay === "help",
+    openPalette,
+    closePalette,
+    closeHelp,
+    // Exposed for G-leader pill if needed.
+    gLeaderRef,
+  };
 }
