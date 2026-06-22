@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { api, type AdminOrderAPI, type OrderStatus } from "@/lib/api";
+import { api, type AdminOrderAPI, type AdminOrderItemAPI, type OrderStatus } from "@/lib/api";
 import { formatDate, formatAge, orderAgeUrgency } from "@/lib/datetime";
 import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
@@ -96,9 +96,12 @@ export default function AdminOrdersPage() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // Orders seen as "confirmed" since the last refresh — pulse briefly, then settle.
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
-  // Two-step / dialog confirmation for destructive cancels.
-  const [armedCancelId, setArmedCancelId] = useState<string | null>(null);
+  // Reason-capturing modals for destructive order ops.
   const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [refundTarget, setRefundTarget] = useState<string | null>(null);
+  const [voidTarget, setVoidTarget] = useState<{ orderId: string; item: AdminOrderItemAPI } | null>(null);
+  const [reasonText, setReasonText] = useState("");
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
@@ -202,8 +205,8 @@ export default function AdminOrdersPage() {
   useEffect(() => { pagedRef.current = paged; }, [paged]);
   useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
 
-  // Reset to the first page (and clear row focus / armed cancel) on view change.
-  useEffect(() => { setPage(1); setFocusedId(null); setArmedCancelId(null); }, [filter, search, sortKey, sortDir]);
+  // Reset to the first page (and clear row focus) on view change.
+  useEffect(() => { setPage(1); setFocusedId(null); }, [filter, search, sortKey, sortDir]);
   // Prune selection to only ids still in the visible set after filter/search changes.
   useEffect(() => {
     if (selected.size === 0) return;
@@ -279,34 +282,62 @@ export default function AdminOrdersPage() {
       return next;
     });
 
-  const transition = useCallback(
-    async (id: string, status: OrderStatus) => {
+  // Run an order mutation that returns the updated order; patch it into state.
+  const applyOrderOp = useCallback(
+    async (id: string, op: () => Promise<AdminOrderAPI>) => {
       if (!token) return;
-      setArmedCancelId(null);
       markBusy([id], true);
       try {
-        // Apply the returned updated order immediately so the row reflects the
-        // new status without waiting for the next full-list refresh.
-        const updated = await api.adminUpdateOrderStatus(token, id, status);
-        if (updated) {
-          setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-        } else {
-          await load();
-        }
+        const updated = await op();
+        if (updated) setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+        else await load();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         markBusy([id], false);
       }
     },
-    [token, load]
+    [token, load],
   );
 
-  // Per-row destructive cancel: first tap arms the button, second confirms.
-  const requestCancel = useCallback((id: string) => {
-    if (armedCancelId === id) transition(id, "cancelled");
-    else setArmedCancelId(id);
-  }, [armedCancelId, transition]);
+  const transition = useCallback(
+    (id: string, status: OrderStatus) =>
+      applyOrderOp(id, () => api.adminUpdateOrderStatus(token!, id, status)),
+    [token, applyOrderOp],
+  );
+
+  // Bump a line item along pending → ready → served.
+  const bumpItem = useCallback(
+    (orderId: string, item: AdminOrderItemAPI) => {
+      const next = item.status === "ready" ? "served" : "ready";
+      return applyOrderOp(orderId, () => api.adminSetItemStatus(token!, orderId, item.id, next));
+    },
+    [token, applyOrderOp],
+  );
+
+  const confirmCancel = useCallback(async () => {
+    if (!cancelTarget) return;
+    const id = cancelTarget;
+    setCancelTarget(null);
+    await applyOrderOp(id, () => api.adminCancelOrder(token!, id, reasonText.trim() || undefined));
+    setReasonText("");
+  }, [cancelTarget, reasonText, token, applyOrderOp]);
+
+  const confirmRefund = useCallback(async () => {
+    if (!refundTarget || !reasonText.trim()) return;
+    const id = refundTarget;
+    setRefundTarget(null);
+    await applyOrderOp(id, () => api.adminRefundOrder(token!, id, reasonText.trim()));
+    setReasonText("");
+  }, [refundTarget, reasonText, token, applyOrderOp]);
+
+  const confirmVoid = useCallback(async () => {
+    if (!voidTarget || !reasonText.trim()) return;
+    const { orderId, item } = voidTarget;
+    setVoidTarget(null);
+    await applyOrderOp(orderId, () => api.adminVoidOrderItem(token!, orderId, item.id, reasonText.trim()));
+    setReasonText("");
+  }, [voidTarget, reasonText, token, applyOrderOp]);
 
   const bulkCancel = useCallback(async () => {
     if (!token || selected.size === 0) return;
@@ -540,10 +571,26 @@ export default function AdminOrdersPage() {
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-ink tabular-nums">{formatPrice(order.total)}</td>
                             <td className="px-4 py-3">
-                              <StatusChip status={order.status} />
+                              <div className="flex items-center gap-1.5">
+                                <StatusChip status={order.status} />
+                                {order.refunded && (
+                                  <span className="inline-flex h-5 px-1.5 items-center rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200">
+                                    Refunded
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              {actable ? (
+                              {order.status === "paid" && !order.refunded ? (
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => setRefundTarget(order.id)}
+                                  disabled={busy}
+                                >
+                                  Refund
+                                </Button>
+                              ) : actable ? (
                                 <div className="inline-flex gap-1 justify-end flex-wrap">
                                   {order.next_statuses.map((s) =>
                                     s === "cancelled" ? (
@@ -551,11 +598,10 @@ export default function AdminOrdersPage() {
                                         key={s}
                                         size="xs"
                                         variant="danger"
-                                        onClick={() => requestCancel(order.id)}
-                                        onBlur={() => armedCancelId === order.id && setArmedCancelId(null)}
+                                        onClick={() => setCancelTarget(order.id)}
                                         disabled={busy}
                                       >
-                                        {armedCancelId === order.id ? "Confirm?" : "Cancel"}
+                                        Cancel
                                       </Button>
                                     ) : (
                                       <Button
@@ -594,18 +640,48 @@ export default function AdminOrdersPage() {
                                   </div>
                                 ) : null}
                                 <ul className="space-y-1.5 text-sm">
-                                  {order.items.map((it) => (
-                                    <li key={it.id} className="flex items-start gap-3">
+                                  {order.items.map((it) => {
+                                    const voided = it.status === "voided";
+                                    const openOrder = order.status !== "paid" && order.status !== "cancelled";
+                                    return (
+                                    <li key={it.id} className="flex items-start gap-3 group/it">
                                       <span className="w-7 text-ink-faint tabular-nums text-xs pt-0.5">{it.quantity}×</span>
-                                      <span className="flex-1 text-ink">
+                                      <span className={`flex-1 ${voided ? "line-through text-ink-faint" : "text-ink"}`}>
                                         {it.name}
                                         {it.special_instructions && (
                                           <span className="text-ink-soft italic ml-2 text-xs">({it.special_instructions})</span>
                                         )}
+                                        {!voided && it.status && it.status !== "pending" && (
+                                          <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">{it.status}</span>
+                                        )}
+                                        {voided && it.void_reason && (
+                                          <span className="ml-2 text-[11px] text-rose-600">void: {it.void_reason}</span>
+                                        )}
                                       </span>
-                                      <span className="text-ink-soft tabular-nums text-xs">{formatPrice(it.line_total)}</span>
+                                      {openOrder && !voided && (
+                                        <span className="flex items-center gap-1 opacity-0 group-hover/it:opacity-100 transition-opacity">
+                                          {it.status !== "served" && (
+                                            <button
+                                              onClick={() => bumpItem(order.id, it)}
+                                              title={it.status === "ready" ? "Mark served" : "Mark ready"}
+                                              className="text-ink-faint hover:text-emerald-600"
+                                            >
+                                              <span className="material-symbols-outlined text-[15px]">{it.status === "ready" ? "room_service" : "check"}</span>
+                                            </button>
+                                          )}
+                                          <button
+                                            onClick={() => { setReasonText(""); setVoidTarget({ orderId: order.id, item: it }); }}
+                                            title="Void this item"
+                                            className="text-ink-faint hover:text-rose-500"
+                                          >
+                                            <span className="material-symbols-outlined text-[15px]">block</span>
+                                          </button>
+                                        </span>
+                                      )}
+                                      <span className={`tabular-nums text-xs ${voided ? "line-through text-ink-faint" : "text-ink-soft"}`}>{formatPrice(it.line_total)}</span>
                                     </li>
-                                  ))}
+                                    );
+                                  })}
                                 </ul>
                                 <div className="mt-3 pt-3 border-t border-line max-w-xs ml-auto text-xs text-ink-soft space-y-1">
                                   <div className="flex justify-between"><span>Subtotal</span><span className="tabular-nums">{formatPrice(order.subtotal)}</span></div>
@@ -669,6 +745,57 @@ export default function AdminOrdersPage() {
               </span>{" "}
               order(s) that can still be cancelled. This can&rsquo;t be undone.
             </p>
+          </Modal>
+        )}
+
+        {cancelTarget && (
+          <Modal
+            open
+            onClose={() => { setCancelTarget(null); setReasonText(""); }}
+            title="Cancel this order?"
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => { setCancelTarget(null); setReasonText(""); }}>Keep it</Button>
+                <Button variant="danger" icon="cancel" onClick={confirmCancel}>Cancel order</Button>
+              </>
+            }
+          >
+            <p className="text-sm text-ink-soft mb-3">Add a reason (optional) — it&rsquo;s recorded in the audit log.</p>
+            <Input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="e.g. customer changed their mind" className="w-full" autoFocus />
+          </Modal>
+        )}
+
+        {refundTarget && (
+          <Modal
+            open
+            onClose={() => { setRefundTarget(null); setReasonText(""); }}
+            title="Refund this order?"
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => { setRefundTarget(null); setReasonText(""); }}>Back</Button>
+                <Button variant="danger" icon="currency_rupee" onClick={confirmRefund} disabled={!reasonText.trim()}>Refund</Button>
+              </>
+            }
+          >
+            <p className="text-sm text-ink-soft mb-3">A reason is required for refunds (audit log).</p>
+            <Input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="e.g. wrong item delivered" className="w-full" autoFocus />
+          </Modal>
+        )}
+
+        {voidTarget && (
+          <Modal
+            open
+            onClose={() => { setVoidTarget(null); setReasonText(""); }}
+            title={`Void "${voidTarget.item.name}"?`}
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => { setVoidTarget(null); setReasonText(""); }}>Back</Button>
+                <Button variant="danger" icon="block" onClick={confirmVoid} disabled={!reasonText.trim()}>Void item</Button>
+              </>
+            }
+          >
+            <p className="text-sm text-ink-soft mb-3">The line stays on the ticket but comes off the bill. Reason required.</p>
+            <Input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="e.g. ran out of an ingredient" className="w-full" autoFocus />
           </Modal>
         )}
       </AdminShell>

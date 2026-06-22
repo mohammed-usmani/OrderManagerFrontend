@@ -143,6 +143,51 @@ export const api = {
       token,
       body: JSON.stringify({ status }),
     }),
+  adminCancelOrder: (token: string, orderId: string, reason?: string) =>
+    apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/cancel`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ reason: reason ?? null }),
+    }),
+  adminEditOrderItem: (
+    token: string, orderId: string,
+    body: { menu_item_id: string; quantity: number; special_instructions?: string },
+  ) =>
+    apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/items`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
+  adminVoidOrderItem: (token: string, orderId: string, orderItemId: string, reason: string) =>
+    apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/void-item`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ order_item_id: orderItemId, reason }),
+    }),
+  adminSetItemStatus: (token: string, orderId: string, orderItemId: string, status: string) =>
+    apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/item-status`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ order_item_id: orderItemId, status }),
+    }),
+  adminRefundOrder: (token: string, orderId: string, reason: string) =>
+    apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/refund`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ reason }),
+    }),
+  adminTransferSession: (token: string, sessionId: string, toTableId: string) =>
+    apiFetch<TableSessionDetailAPI>(`/table-sessions/${sessionId}/transfer`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ to_table_id: toTableId }),
+    }),
+  adminMergeSession: (token: string, sessionId: string, intoSessionId: string) =>
+    apiFetch<TableSessionDetailAPI>(`/table-sessions/${sessionId}/merge`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ into_session_id: intoSessionId }),
+    }),
   adminAnalyticsSummary: (
     token: string,
     range: "today" | "7d" | "30d" | "all" = "today",
@@ -348,6 +393,8 @@ export interface AdminOrderItemAPI {
   price_at_order: number;
   line_total: number;
   special_instructions: string | null;
+  status?: "pending" | "ready" | "served" | "voided";
+  void_reason?: string | null;
 }
 
 export interface AnalyticsTopItem {
@@ -497,6 +544,8 @@ export interface AdminOrderAPI {
   charges: BillCharge[];
   total: number;
   items: AdminOrderItemAPI[];
+  refunded?: boolean;
+  cancellation_reason?: string | null;
 }
 
 // Floors, zones, tables, floor map (dine-in)
