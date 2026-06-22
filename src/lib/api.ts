@@ -354,6 +354,35 @@ export const api = {
   adminDeleteStaff: (token: string, id: string) =>
     apiFetch<void>(`/staff/${id}`, { method: "DELETE", token }),
 
+  // Payments
+  getPaymentConfig: () =>
+    apiFetch<{ razorpay_enabled: boolean; key_id: string }>("/payments/config"),
+  paymentQuote: (body: PaymentTargetAPI) =>
+    apiFetch<{ amount_due: number }>("/payments/quote", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  createRazorpayCheckout: (body: PaymentTargetAPI) =>
+    apiFetch<RazorpayCheckoutAPI>("/payments/razorpay/order", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  verifyRazorpay: (body: {
+    provider_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) =>
+    apiFetch<{ status: string; amount: number }>("/payments/razorpay/verify", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  settleCash: (token: string, body: PaymentTargetAPI) =>
+    apiFetch<{ status: string; amount: number; method: string }>("/payments/cash", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
   // Restaurant profile (public GET; admin PUT)
   getRestaurantProfile: () =>
     apiFetch<RestaurantProfileAPI>("/settings/restaurant"),
@@ -751,6 +780,22 @@ export interface ChargeRuleAPI {
   rate: number;
   applies_to: "all" | "dine_in" | "parcel";
   ac_only: boolean;
+}
+
+export interface PaymentTargetAPI {
+  order_id?: string;
+  session_id?: string;
+  tip?: number;
+  discount?: number;
+}
+
+export interface RazorpayCheckoutAPI {
+  provider_order_id: string;
+  amount: number;
+  amount_paise: number;
+  currency: string;
+  key_id: string;
+  payment_id: string;
 }
 
 export interface StaffAPI {

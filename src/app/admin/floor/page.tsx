@@ -20,6 +20,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, Select, EmptyState } from "@/components/admin/ui";
 import { FloorCanvas, type CanvasTable } from "@/components/admin/FloorCanvas";
+import { BillingModal } from "@/components/admin/BillingModal";
 import { useOrderStream } from "@/hooks/useOrderStream";
 
 const REFRESH_MS = 10000;
@@ -36,6 +37,7 @@ export default function AdminFloorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
+  const [billingSession, setBillingSession] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [saving, setSaving] = useState(false);
@@ -312,7 +314,16 @@ export default function AdminFloorPage() {
             sessionId={openSessionId}
             token={token ?? ""}
             onClose={() => setOpenSessionId(null)}
-            onSettled={() => { setOpenSessionId(null); load(); }}
+            onTakePayment={(id) => { setOpenSessionId(null); setBillingSession(id); }}
+          />
+        )}
+        {billingSession && (
+          <BillingModal
+            target={{ session_id: billingSession }}
+            title="Settle table"
+            token={token}
+            onClose={() => setBillingSession(null)}
+            onPaid={() => { setBillingSession(null); load(); }}
           />
         )}
         {manageFloors && (
@@ -612,15 +623,14 @@ function SettleModal({
   sessionId,
   token,
   onClose,
-  onSettled,
+  onTakePayment,
 }: {
   sessionId: string;
   token: string;
   onClose: () => void;
-  onSettled: () => void;
+  onTakePayment: (sessionId: string) => void;
 }) {
   const [detail, setDetail] = useState<TableSessionDetailAPI | null>(null);
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -631,18 +641,6 @@ function SettleModal({
       .catch((e) => alive && setErr(e instanceof Error ? e.message : String(e)));
     return () => { alive = false; };
   }, [token, sessionId]);
-
-  const settle = async () => {
-    setBusy(true);
-    setErr("");
-    try {
-      await api.adminSettleTableSession(token, sessionId);
-      onSettled();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
-  };
 
   const title = detail
     ? `Table ${detail.table_label ?? "?"}${detail.floor_name ? ` · ${detail.floor_name}` : ""}${detail.is_ac ? " · AC" : ""} — the check`
@@ -655,9 +653,9 @@ function SettleModal({
       title={title}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Close</Button>
-          <Button variant="primary" icon="paid" onClick={settle} disabled={busy || !detail}>
-            {busy ? "Settling…" : "Settle & free table"}
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button variant="primary" icon="paid" onClick={() => onTakePayment(sessionId)} disabled={!detail}>
+            Take payment
           </Button>
         </>
       }

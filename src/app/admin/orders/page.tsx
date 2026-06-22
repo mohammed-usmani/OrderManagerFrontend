@@ -10,6 +10,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
 import { useOrderStream } from "@/hooks/useOrderStream";
+import { BillingModal } from "@/components/admin/BillingModal";
 
 // Short two-tone chime for newly-arrived orders (WebAudio — no asset needed).
 function ding() {
@@ -37,6 +38,29 @@ function ding() {
   } catch {
     /* autoplay blocked / no WebAudio — stay silent */
   }
+}
+
+// Open a kitchen order ticket (KOT) in a print window — items + notes only.
+function printKOT(order: AdminOrderAPI) {
+  const w = window.open("", "_blank", "width=340,height=620");
+  if (!w) return;
+  const where = order.order_type === "dine_in"
+    ? `Table ${order.table_label ?? "?"}${order.zone_name ? ` · ${order.zone_name}` : ""}`
+    : "PARCEL / DELIVERY";
+  const rows = order.items
+    .filter((i) => i.status !== "voided")
+    .map((i) => `<tr><td class="q">${i.quantity}×</td><td>${i.name}${i.special_instructions ? `<br/><i>${i.special_instructions}</i>` : ""}</td></tr>`)
+    .join("");
+  w.document.write(
+    `<html><head><title>KOT ${order.id.slice(0, 8)}</title><style>` +
+    `body{font-family:monospace;padding:10px;width:300px;color:#000}h2{margin:0 0 2px;letter-spacing:2px}` +
+    `.meta{font-size:12px;margin-bottom:6px}table{width:100%;border-collapse:collapse;font-size:14px}` +
+    `td{padding:4px 0;vertical-align:top;border-bottom:1px dashed #999}.q{width:32px;font-weight:bold}i{color:#444;font-size:12px}` +
+    `</style></head><body onload="window.print()">` +
+    `<h2>KOT</h2><div class="meta">${where}<br/>#${order.id.slice(0, 8).toUpperCase()} · ${new Date().toLocaleTimeString()}</div>` +
+    `<table>${rows}</table></body></html>`,
+  );
+  w.document.close();
 }
 
 type Filter =
@@ -101,6 +125,7 @@ export default function AdminOrdersPage() {
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [refundTarget, setRefundTarget] = useState<string | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ orderId: string; item: AdminOrderItemAPI } | null>(null);
+  const [payTarget, setPayTarget] = useState<AdminOrderAPI | null>(null);
   const [reasonText, setReasonText] = useState("");
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
@@ -603,11 +628,21 @@ export default function AdminOrdersPage() {
                                       >
                                         Cancel
                                       </Button>
+                                    ) : s === "paid" ? (
+                                      <Button
+                                        key={s}
+                                        size="xs"
+                                        variant="primary"
+                                        onClick={() => setPayTarget(order)}
+                                        disabled={busy}
+                                      >
+                                        Take payment
+                                      </Button>
                                     ) : (
                                       <Button
                                         key={s}
                                         size="xs"
-                                        variant={s === "paid" ? "primary" : "secondary"}
+                                        variant="secondary"
                                         onClick={() => transition(order.id, s)}
                                         disabled={busy}
                                       >
@@ -639,6 +674,11 @@ export default function AdminOrdersPage() {
                                     {order.contact_phone ? ` · ${order.contact_phone}` : ""}
                                   </div>
                                 ) : null}
+                                <div className="mb-2 flex justify-end">
+                                  <Button size="xs" variant="ghost" icon="print" onClick={() => printKOT(order)}>
+                                    Print KOT
+                                  </Button>
+                                </div>
                                 <ul className="space-y-1.5 text-sm">
                                   {order.items.map((it) => {
                                     const voided = it.status === "voided";
@@ -797,6 +837,17 @@ export default function AdminOrdersPage() {
             <p className="text-sm text-ink-soft mb-3">The line stays on the ticket but comes off the bill. Reason required.</p>
             <Input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="e.g. ran out of an ingredient" className="w-full" autoFocus />
           </Modal>
+        )}
+
+        {payTarget && (
+          <BillingModal
+            target={{ order_id: payTarget.id }}
+            title={`Take payment · #${payTarget.id.slice(0, 8).toUpperCase()}`}
+            subtitle={payTarget.order_type === "dine_in" ? `Table ${payTarget.table_label ?? "?"}` : payTarget.customer_name || undefined}
+            token={token}
+            onClose={() => setPayTarget(null)}
+            onPaid={() => { setPayTarget(null); load(); }}
+          />
         )}
       </AdminShell>
     </AppShell>
