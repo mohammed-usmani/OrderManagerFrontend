@@ -354,6 +354,12 @@ export const api = {
   adminDeleteStaff: (token: string, id: string) =>
     apiFetch<void>(`/staff/${id}`, { method: "DELETE", token }),
 
+  // Guest (dine-in, public by QR token)
+  guestTab: (qrToken: string) =>
+    apiFetch<GuestTabAPI>(`/tables/tab/${encodeURIComponent(qrToken)}`),
+  guestCallWaiter: (qrToken: string) =>
+    apiFetch<{ ok: boolean }>(`/tables/call/${encodeURIComponent(qrToken)}`, { method: "POST" }),
+
   // Payments
   getPaymentConfig: () =>
     apiFetch<{ razorpay_enabled: boolean; key_id: string }>("/payments/config"),
@@ -780,6 +786,19 @@ export interface ChargeRuleAPI {
   rate: number;
   applies_to: "all" | "dine_in" | "parcel";
   ac_only: boolean;
+}
+
+export interface GuestTabAPI {
+  open: boolean;
+  session_id?: string;
+  table_label?: string;
+  grand_subtotal?: number;
+  grand_total?: number;
+  orders?: {
+    id: string;
+    status: string;
+    items: { name: string; quantity: number; line_total: number }[];
+  }[];
 }
 
 export interface PaymentTargetAPI {

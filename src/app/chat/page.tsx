@@ -11,6 +11,107 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { Canvas } from "@/components/Canvas";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { BillingModal } from "@/components/admin/BillingModal";
+import { api, type GuestTabAPI } from "@/lib/api";
+
+/** Dine-in guest actions: call a waiter, view the running tab, pay from phone. */
+function GuestActions({ ctx }: { ctx: TableContext }) {
+  const [pinged, setPinged] = useState(false);
+  const [tab, setTab] = useState<GuestTabAPI | null>(null);
+  const [showTab, setShowTab] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [err, setErr] = useState("");
+
+  const callWaiter = async () => {
+    try {
+      await api.guestCallWaiter(ctx.token);
+      setPinged(true);
+      setTimeout(() => setPinged(false), 8000);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const openTab = async () => {
+    setErr("");
+    try {
+      const t = await api.guestTab(ctx.token);
+      setTab(t);
+      setShowTab(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={callWaiter}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:border-primary/30 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[16px]">support_agent</span>
+          {pinged ? "A server is on the way" : "Call waiter"}
+        </button>
+        <button
+          onClick={openTab}
+          className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 text-primary px-3 py-1.5 text-xs font-semibold hover:bg-primary/25 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+          View tab &amp; pay
+        </button>
+      </div>
+
+      {showTab && tab && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => setShowTab(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl ember-card p-5 animate-slide-up">
+            <h3 className="font-headline font-semibold text-on-surface text-lg mb-1">Your tab · Table {tab.table_label}</h3>
+            {!tab.open ? (
+              <p className="text-on-surface-variant text-sm py-4">No open tab yet — order something first!</p>
+            ) : (
+              <>
+                <div className="max-h-60 overflow-y-auto space-y-2 my-3">
+                  {(tab.orders ?? []).flatMap((o) =>
+                    o.items.map((it, i) => (
+                      <div key={`${o.id}-${i}`} className="flex justify-between text-sm text-on-surface">
+                        <span>{it.quantity}× {it.name}</span>
+                        <span className="tabular-nums text-on-surface-variant">₹{Math.round(it.line_total)}</span>
+                      </div>
+                    )),
+                  )}
+                </div>
+                <div className="flex justify-between font-semibold text-on-surface border-t border-white/10 pt-2">
+                  <span>Total</span>
+                  <span className="tabular-nums">₹{Math.round(tab.grand_total ?? 0)}</span>
+                </div>
+                <button
+                  onClick={() => { setShowTab(false); setPaying(true); }}
+                  className="mt-4 w-full rounded-xl bg-gradient-to-br from-primary to-tertiary text-on-primary py-3 font-semibold hover:brightness-110 active:scale-95 transition-all"
+                >
+                  Pay now
+                </button>
+              </>
+            )}
+            <button onClick={() => setShowTab(false)} className="mt-2 w-full text-center text-xs text-on-surface-variant py-1">Close</button>
+            {err && <p className="text-rose-400 text-xs mt-2">{err}</p>}
+          </div>
+        </div>
+      )}
+
+      {paying && tab?.session_id && (
+        <BillingModal
+          target={{ session_id: tab.session_id }}
+          title={`Pay · Table ${tab.table_label}`}
+          token={null}
+          allowCash={false}
+          onClose={() => setPaying(false)}
+          onPaid={() => { setPaying(false); setTab(null); }}
+        />
+      )}
+    </>
+  );
+}
 
 /** Single source of the dine-in table chip — guards the binding once. */
 function TableBadge({ ctx }: { ctx: TableContext }) {
@@ -129,6 +230,18 @@ export default function ChatPage() {
         </div>
         </div>
       </div>
+
+      {/* Dine-in guest actions (call waiter / view tab / pay) — all screen sizes */}
+      {tableContext && (
+        <div className="flex items-center gap-2 px-4 md:px-8 py-2.5 border-b border-white/5">
+          <span className="md:hidden text-xs text-on-surface-variant inline-flex items-center">
+            <TableBadge ctx={tableContext} />
+          </span>
+          <div className="ml-auto">
+            <GuestActions ctx={tableContext} />
+          </div>
+        </div>
+      )}
 
       {/* Transcript drawer — accessible record of the conversation (matters for
           allergy / order accuracy). Toggled from the status bar. */}

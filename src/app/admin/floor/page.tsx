@@ -38,6 +38,7 @@ export default function AdminFloorPage() {
   const [error, setError] = useState("");
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [billingSession, setBillingSession] = useState<string | null>(null);
+  const [serviceAlert, setServiceAlert] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [saving, setSaving] = useState(false);
@@ -73,8 +74,19 @@ export default function AdminFloorPage() {
     return () => clearInterval(t);
   }, [load, editing]);
 
-  // Real-time table status — but never refresh mid-edit (would clobber drags).
-  useOrderStream(token, editing ? () => {} : load);
+  // Real-time table status + service-request alerts. Never refresh mid-edit
+  // (would clobber un-saved drags), but still surface call-waiter pings.
+  const onStream = useCallback(
+    (data?: { kind?: string; table_label?: string }) => {
+      if (data?.kind === "service_request") {
+        setServiceAlert(`Table ${data.table_label ?? "?"} is asking for service`);
+        window.setTimeout(() => setServiceAlert(null), 20000);
+      }
+      if (!editing) load();
+    },
+    [editing, load],
+  );
+  useOrderStream(token, onStream);
 
   const activeFloor = floors.find((f) => f.id === activeId) ?? floors[0] ?? null;
   const zoneColor = useMemo(() => {
@@ -211,6 +223,15 @@ export default function AdminFloorPage() {
         <main className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-28 md:pb-8 max-w-[1400px] mx-auto w-full">
           {error && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+          )}
+          {serviceAlert && (
+            <div className="mb-3 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 reveal-sm">
+              <span className="material-symbols-outlined text-[18px]">support_agent</span>
+              <span className="flex-1 font-medium">{serviceAlert}</span>
+              <button onClick={() => setServiceAlert(null)} className="text-amber-700 hover:text-amber-900">
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
           )}
 
           {/* Floor switcher */}
