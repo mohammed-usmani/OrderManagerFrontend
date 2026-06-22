@@ -20,6 +20,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, Select, EmptyState } from "@/components/admin/ui";
 import { FloorCanvas, type CanvasTable } from "@/components/admin/FloorCanvas";
+import { useOrderStream } from "@/hooks/useOrderStream";
 
 const REFRESH_MS = 10000;
 const ZONE_COLORS = ["#cfe8ff", "#ffe0c2", "#d6f5d6", "#f3d6f0", "#fff3bf", "#d6f0f0"];
@@ -69,6 +70,9 @@ export default function AdminFloorPage() {
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [load, editing]);
+
+  // Real-time table status — but never refresh mid-edit (would clobber drags).
+  useOrderStream(token, editing ? () => {} : load);
 
   const activeFloor = floors.find((f) => f.id === activeId) ?? floors[0] ?? null;
   const zoneColor = useMemo(() => {

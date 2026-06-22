@@ -9,6 +9,35 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
+import { useOrderStream } from "@/hooks/useOrderStream";
+
+// Short two-tone chime for newly-arrived orders (WebAudio — no asset needed).
+function ding() {
+  try {
+    const Ctx = window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    [880, 1175].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f;
+      o.connect(g);
+      g.connect(ctx.destination);
+      const t = now + i * 0.13;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.start(t);
+      o.stop(t + 0.2);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 600);
+  } catch {
+    /* autoplay blocked / no WebAudio — stay silent */
+  }
+}
 
 type Filter =
   | "active" | "all" | "confirmed" | "cooking"
@@ -97,6 +126,7 @@ export default function AdminOrdersPage() {
       const firstLoad = seenIdsRef.current.size === 0;
       data.forEach((o) => seenIdsRef.current.add(o.id));
       if (fresh.length && !firstLoad) {
+        ding(); // audible alert for newly-arrived orders
         setNewIds((prev) => new Set([...prev, ...fresh]));
         window.setTimeout(() => {
           setNewIds((prev) => {
@@ -130,6 +160,10 @@ export default function AdminOrdersPage() {
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  // Real-time: refetch instantly on any server-side order change (SSE). The
+  // interval above stays as a fallback if the stream drops.
+  useOrderStream(token, load);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();

@@ -25,6 +25,7 @@ import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Modal, EmptyState } from "@/components/admin/ui";
+import { useOrderStream } from "@/hooks/useOrderStream";
 
 const REFRESH_MS = 8000;
 
@@ -89,6 +90,9 @@ export default function AdminTablesPage() {
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  // Real-time refresh on settle / bill-request / status changes.
+  useOrderStream(token, load);
 
   const activeFloor = floors.find((f) => f.id === activeFloorId) ?? floors[0] ?? null;
 
