@@ -60,6 +60,9 @@ export interface MenuItemAPI {
   popularity_note?: string | null;
   image_url: string | null;
   available: boolean;
+  track_stock?: boolean;
+  stock_qty?: number | null;
+  is_86?: boolean;
 }
 
 export interface OrderItemAPI {
@@ -448,6 +451,9 @@ export interface MenuItemPatchAPI {
   popularity_note?: string | null;
   image_url?: string | null;
   available?: boolean;
+  track_stock?: boolean;
+  stock_qty?: number | null;
+  is_86?: boolean;
 }
 
 /** Canonical order lifecycle states (mirrors the backend state machine). */

@@ -454,10 +454,31 @@ export default function AdminMenuPage() {
                             <span className="text-ink-soft">{item.serving || "—"}</span>
                           </EditableCell>
                           <td className="px-4 py-3">
-                            <StatusChip status={item.available ? "available" : "disabled"} />
+                            <div className="flex items-center gap-1.5">
+                              <StatusChip status={item.available ? "available" : "disabled"} />
+                              {item.is_86 && (
+                                <span className="inline-flex h-5 px-1.5 items-center rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200" title="Marked sold out (86)">
+                                  86
+                                </span>
+                              )}
+                              {item.track_stock && (
+                                <span className="text-[11px] text-ink-faint tabular-nums" title="Stock remaining">
+                                  · {item.stock_qty ?? 0} left
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="inline-flex items-center gap-1 justify-end">
+                              <Button
+                                size="sm"
+                                variant={item.is_86 ? "secondary" : "ghost"}
+                                onClick={() => patchItem(item.id, { is_86: !item.is_86 })}
+                                disabled={busy}
+                                title={item.is_86 ? "Put back on the menu" : "Mark sold out for today"}
+                              >
+                                {item.is_86 ? "Un-86" : "86"}
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
