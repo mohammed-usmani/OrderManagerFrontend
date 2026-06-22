@@ -290,6 +290,16 @@ export const api = {
       body: JSON.stringify({ charges }),
     }),
 
+  // Restaurant profile (public GET; admin PUT)
+  getRestaurantProfile: () =>
+    apiFetch<RestaurantProfileAPI>("/settings/restaurant"),
+  adminUpdateRestaurantProfile: (token: string, profile: RestaurantProfileAPI) =>
+    apiFetch<RestaurantProfileAPI>("/settings/restaurant", {
+      method: "PUT",
+      token,
+      body: JSON.stringify(profile),
+    }),
+
   // Service areas (admin)
   adminListServiceAreas: (token: string) =>
     apiFetch<ServiceAreaAPI[]>("/service-areas", { token }),
@@ -670,6 +680,28 @@ export interface ChargeRuleAPI {
   rate: number;
   applies_to: "all" | "dine_in" | "parcel";
   ac_only: boolean;
+}
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export interface HoursWindowAPI {
+  open: string; // HH:MM (24h)
+  close: string;
+}
+export interface RestaurantProfileAPI {
+  name: string;
+  legal_name: string;
+  cuisine: string;
+  tagline: string;
+  address_line1: string;
+  address_line2: string;
+  phone: string;
+  email: string;
+  website: string;
+  gstin: string;
+  fssai: string;
+  currency: string;
+  timezone: string;
+  hours: Record<Weekday, HoursWindowAPI[]>;
 }
 
 // Customers (parcel callers)

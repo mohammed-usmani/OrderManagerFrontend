@@ -8,7 +8,7 @@
  * to get a real PDF — no heavyweight PDF libraries needed.
  */
 
-import type { MenuItemAPI, OrderAPI } from "@/lib/api";
+import type { MenuItemAPI, OrderAPI, RestaurantProfileAPI } from "@/lib/api";
 import { BRAND, formatPrice } from "@/lib/brand";
 import { amountInWords } from "@/lib/amount-in-words";
 
@@ -28,10 +28,24 @@ function fmtDate(iso: string | null): string {
 export function Receipt({
   order,
   menu,
+  profile,
 }: {
   order: OrderAPI;
   menu: MenuItemAPI[];
+  /** Live restaurant profile from settings; falls back to static BRAND. */
+  profile?: RestaurantProfileAPI | null;
 }) {
+  // Identity for the printed invoice — prefer the editable profile, else BRAND.
+  const id = {
+    name: profile?.name || BRAND.name,
+    cuisine: profile?.cuisine || BRAND.cuisine,
+    line1: profile?.address_line1 || BRAND.address.line1,
+    line2: profile?.address_line2 || BRAND.address.line2,
+    phone: profile?.phone || BRAND.phone,
+    website: profile?.website || BRAND.website,
+    gstin: profile?.gstin || BRAND.gstin,
+    fssai: profile?.fssai || BRAND.fssai,
+  };
   const menuMap = new Map(menu.map((m) => [m.id, m]));
   const placed = order.confirmed_at ?? order.created_at;
   const billNo = "CO-" + order.id.replace(/-/g, "").slice(0, 7).toUpperCase();
@@ -59,23 +73,23 @@ export function Receipt({
         {/* Header */}
         <div className="text-center">
           <h1 className="font-serif text-2xl font-extrabold tracking-wide">
-            {BRAND.name.toUpperCase()}
+            {id.name.toUpperCase()}
           </h1>
           <p className="text-[10px] mt-0.5 tracking-wider uppercase">
-            {BRAND.cuisine}
+            {id.cuisine}
           </p>
           <p className="text-[10px] mt-2 leading-tight">
-            {BRAND.address.line1}
+            {id.line1}
             <br />
-            {BRAND.address.line2}
+            {id.line2}
           </p>
           <p className="text-[10px] mt-1">
-            Tel: {BRAND.phone} · {BRAND.website}
+            Tel: {id.phone} · {id.website}
           </p>
           <div className="mt-2 text-[9px] uppercase tracking-widest">
-            GSTIN: {BRAND.gstin}
+            GSTIN: {id.gstin}
             <br />
-            FSSAI License No. {BRAND.fssai}
+            FSSAI License No. {id.fssai}
           </div>
         </div>
 

@@ -25,6 +25,7 @@ export const ADMIN_ROUTES: AdminRoute[] = [
   { href: "/admin/pricing",       icon: "payments",         label: "Pricing",        goKey: "p", description: "Dynamic pricing rules" },
   { href: "/admin/customers",     icon: "groups",           label: "Customers",      goKey: "c", description: "Guest records & history" },
   { href: "/admin/service-areas", icon: "pin_drop",         label: "Delivery Areas", goKey: "r", description: "Service zone configuration" },
+  { href: "/admin/settings",      icon: "settings",         label: "Settings",       goKey: "s", description: "Restaurant profile, GST & hours" },
 ];
 
 /** Keyboard hint, e.g. "G D". */

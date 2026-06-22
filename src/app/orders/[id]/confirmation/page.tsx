@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { api, type OrderAPI, type MenuItemAPI } from "@/lib/api";
+import { api, type OrderAPI, type MenuItemAPI, type RestaurantProfileAPI } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 import { AppShell } from "@/components/AppShell";
 import { Receipt } from "@/components/Receipt";
@@ -43,6 +43,7 @@ export default function OrderConfirmationPage() {
 
   const [order, setOrder] = useState<OrderAPI | null>(null);
   const [menu, setMenu] = useState<MenuItemAPI[]>([]);
+  const [profile, setProfile] = useState<RestaurantProfileAPI | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -51,6 +52,8 @@ export default function OrderConfirmationPage() {
       router.replace("/auth/signin");
       return;
     }
+    // Profile is best-effort (the receipt falls back to BRAND); never block on it.
+    api.getRestaurantProfile().then(setProfile).catch(() => {});
     Promise.all([api.getOrder(orderId, token!), api.getMenu()])
       .then(([ord, menuItems]) => {
         setOrder(ord);
@@ -376,7 +379,7 @@ export default function OrderConfirmationPage() {
       </main>
 
       {/* Hidden on screen; becomes the ONLY visible content during print. */}
-      <Receipt order={order} menu={menu} />
+      <Receipt order={order} menu={menu} profile={profile} />
     </AppShell>
   );
 }
