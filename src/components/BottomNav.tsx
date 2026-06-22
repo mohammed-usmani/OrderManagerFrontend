@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { ADMIN_ROUTES, activeHref } from "@/lib/adminRoutes";
+import { activeHref, routesForRole, isStaffRole } from "@/lib/adminRoutes";
 
 interface NavItem {
   href: string;
@@ -16,31 +16,28 @@ const PUBLIC_NAV: NavItem[] = [
   { href: "/chat", icon: "mic", label: "Order" },
 ];
 
-// Primary admin tabs shown in the bar; everything else lives in the "More" sheet.
-const ADMIN_PRIMARY: NavItem[] = ADMIN_ROUTES.filter((r) => r.mobileVisible).map((r) => ({
-  href: r.href,
-  icon: r.icon,
-  label: r.label,
-}));
-const ADMIN_MORE: NavItem[] = ADMIN_ROUTES.filter((r) => !r.mobileVisible).map((r) => ({
-  href: r.href,
-  icon: r.icon,
-  label: r.label,
-}));
-
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
-  const isAdmin = Boolean(user?.is_admin);
+  const isAdmin = isStaffRole(user?.role);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const primaryItems = isAdmin ? ADMIN_PRIMARY : PUBLIC_NAV;
-  // For active-state matching, consider the full admin route set so a route that
+  // Role-filtered admin routes; primary tabs in the bar, the rest in "More".
+  const roleRoutes = routesForRole(user?.role);
+  const adminPrimary: NavItem[] = roleRoutes
+    .filter((r) => r.mobileVisible)
+    .map((r) => ({ href: r.href, icon: r.icon, label: r.label }));
+  const adminMore: NavItem[] = roleRoutes
+    .filter((r) => !r.mobileVisible)
+    .map((r) => ({ href: r.href, icon: r.icon, label: r.label }));
+
+  const primaryItems = isAdmin ? adminPrimary : PUBLIC_NAV;
+  // For active-state matching, consider all the role's routes so a route that
   // only lives in "More" still highlights the More button when it's active.
-  const allItems = isAdmin ? ADMIN_ROUTES : PUBLIC_NAV;
+  const allItems = isAdmin ? roleRoutes : PUBLIC_NAV;
   const activeRoute = activeHref(pathname, allItems);
-  const moreActive = isAdmin && ADMIN_MORE.some((i) => i.href === activeRoute);
+  const moreActive = isAdmin && adminMore.some((i) => i.href === activeRoute);
 
   const go = (href: string) => {
     setMoreOpen(false);
@@ -59,7 +56,7 @@ export function BottomNav() {
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15" />
             <div className="grid grid-cols-3 gap-2">
-              {ADMIN_MORE.map(({ href, icon, label }) => {
+              {adminMore.map(({ href, icon, label }) => {
                 const isActive = href === activeRoute;
                 return (
                   <button

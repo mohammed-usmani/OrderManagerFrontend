@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { ADMIN_ROUTES, activeHref, shortcutFor } from "@/lib/adminRoutes";
+import { activeHref, routesForRole, shortcutFor, isStaffRole } from "@/lib/adminRoutes";
 
 interface NavItem {
   href: string;
@@ -16,19 +16,18 @@ const PUBLIC_NAV: NavItem[] = [
   { href: "/chat", icon: "mic", label: "Order" },
 ];
 
-const ADMIN_NAV: NavItem[] = ADMIN_ROUTES.map((r) => ({
-  href: r.href,
-  icon: r.icon,
-  label: r.label,
-  shortcut: shortcutFor(r),
-}));
-
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const isAdmin = Boolean(user?.is_admin);
-  const visibleItems = isAdmin ? ADMIN_NAV : PUBLIC_NAV;
+  const isAdmin = isStaffRole(user?.role);
+  const adminNav: NavItem[] = routesForRole(user?.role).map((r) => ({
+    href: r.href,
+    icon: r.icon,
+    label: r.label,
+    shortcut: shortcutFor(r),
+  }));
+  const visibleItems = isAdmin ? adminNav : PUBLIC_NAV;
   const activeRoute = activeHref(pathname, visibleItems);
 
   const initials = user ? user.email.slice(0, 2).toUpperCase() : "??";

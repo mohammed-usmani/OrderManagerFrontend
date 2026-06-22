@@ -290,6 +290,22 @@ export const api = {
       body: JSON.stringify({ charges }),
     }),
 
+  // Staff (owner/manager)
+  adminListStaff: (token: string) => apiFetch<StaffAPI[]>("/staff", { token }),
+  adminCreateStaff: (
+    token: string,
+    body: { email: string; name: string; password: string; role: string },
+  ) =>
+    apiFetch<StaffAPI>("/staff", { method: "POST", token, body: JSON.stringify(body) }),
+  adminUpdateStaffRole: (token: string, id: string, role: string) =>
+    apiFetch<StaffAPI>(`/staff/${id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ role }),
+    }),
+  adminDeleteStaff: (token: string, id: string) =>
+    apiFetch<void>(`/staff/${id}`, { method: "DELETE", token }),
+
   // Restaurant profile (public GET; admin PUT)
   getRestaurantProfile: () =>
     apiFetch<RestaurantProfileAPI>("/settings/restaurant"),
@@ -680,6 +696,15 @@ export interface ChargeRuleAPI {
   rate: number;
   applies_to: "all" | "dine_in" | "parcel";
   ac_only: boolean;
+}
+
+export interface StaffAPI {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  is_admin: boolean;
+  created_at: string;
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";

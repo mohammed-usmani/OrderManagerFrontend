@@ -9,7 +9,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ADMIN_ROUTES, shortcutFor } from "@/lib/adminRoutes";
+import { routesForRole, shortcutFor } from "@/lib/adminRoutes";
+import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface Command {
@@ -29,6 +30,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -45,8 +47,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   );
 
   const COMMANDS: Command[] = [
-    // Navigation — derived from the canonical admin route registry.
-    ...ADMIN_ROUTES.map((r) => ({
+    // Navigation — only the routes the current role may access.
+    ...routesForRole(user?.role).map((r) => ({
       id: r.href,
       group: "Navigate",
       label: r.label,

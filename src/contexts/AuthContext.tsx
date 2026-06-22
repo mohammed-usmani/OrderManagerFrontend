@@ -3,10 +3,13 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { API_URL, onUnauthorized } from "@/lib/api";
 
+export type StaffRole = "owner" | "manager" | "cashier" | "waiter" | "chef" | "none";
+
 export interface AuthUser {
   id: string;
   email: string;
   is_admin: boolean;
+  role: StaffRole;
 }
 
 interface AuthContextType {
@@ -34,6 +37,7 @@ function decodeJwt(token: string): AuthUser | null {
       id: payload.sub,
       email: payload.email,
       is_admin: payload.is_admin ?? false,
+      role: (payload.role ?? (payload.is_admin ? "manager" : "none")) as StaffRole,
     };
   } catch {
     return null;

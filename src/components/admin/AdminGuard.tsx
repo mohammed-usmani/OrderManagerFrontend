@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { canAccess, defaultRouteForRole, isStaffRole } from "@/lib/adminRoutes";
 
 /**
  * Client-side admin gate, mounted once in the admin layout. Redirects anonymous
@@ -18,15 +19,27 @@ import { useAuth } from "@/contexts/AuthContext";
 export function AdminGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const staff = isStaffRole(user?.role);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace("/auth/signin");
       return;
     }
-    if (user && !user.is_admin) router.replace("/chat");
-  }, [isAuthenticated, user, router]);
+    if (user && !staff) {
+      // Logged in but not staff (e.g. a public registrant) → customer app.
+      router.replace("/chat");
+      return;
+    }
+    // Staff on a page their role can't see → bounce to their home page.
+    if (user && staff && !canAccess(pathname, user.role)) {
+      router.replace(defaultRouteForRole(user.role));
+    }
+  }, [isAuthenticated, user, staff, pathname, router]);
 
-  if (!isAuthenticated || !user?.is_admin) return null;
+  if (!isAuthenticated || !staff) return null;
+  if (user && !canAccess(pathname, user.role)) return null;
   return <>{children}</>;
 }

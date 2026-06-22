@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { defaultRouteForRole, isStaffRole } from "@/lib/adminRoutes";
 
 export default function SignInPage() {
   const { login } = useAuth();
@@ -19,7 +20,10 @@ export default function SignInPage() {
     setLoading(true);
     try {
       const loggedIn = await login(email, password);
-      router.replace(loggedIn.is_admin ? "/admin" : "/chat");
+      // Send each staff role to its home station; non-staff to the customer app.
+      router.replace(
+        isStaffRole(loggedIn.role) ? defaultRouteForRole(loggedIn.role) : "/chat",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
       setShakeKey((k) => k + 1); // re-trigger shake animation

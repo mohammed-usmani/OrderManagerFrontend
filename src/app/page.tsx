@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type MenuItemAPI } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
+import { defaultRouteForRole, isStaffRole } from "@/lib/adminRoutes";
 
 // Public-facing delivery zone (mirrors the seeded service areas).
 const DELIVERY_AREAS = [
@@ -99,9 +100,12 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Only staff get redirected to the back-office; the public stays here.
+  // Only staff get redirected to the back-office (each to their home station);
+  // the public stays here.
   useEffect(() => {
-    if (isAuthenticated && user?.is_admin) router.replace("/admin");
+    if (isAuthenticated && isStaffRole(user?.role)) {
+      router.replace(defaultRouteForRole(user?.role));
+    }
   }, [isAuthenticated, user, router]);
 
   // Pull real, photographed dishes from the live menu (Cloudinary images the
@@ -126,7 +130,7 @@ export default function LandingPage() {
     document.getElementById("menu")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // Staff are being redirected to /admin — don't flash the customer landing.
-  if (isAuthenticated && user?.is_admin) return null;
+  if (isAuthenticated && isStaffRole(user?.role)) return null;
 
   return (
     <main className="min-h-dvh flex flex-col">
