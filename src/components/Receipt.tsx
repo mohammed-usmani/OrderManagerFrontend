@@ -90,7 +90,7 @@ export function Receipt({
         {/* Bill meta */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
           <Row label="Bill No." value={billNo} />
-          <Row label="Type" value="Dine-In" />
+          <Row label="Type" value={order.order_type === "dine_in" ? "Dine-In" : "Parcel"} />
           <Row label="Date" value={fmtDate(placed)} />
           <Row label="Status" value={order.status.replace("_", " ").toUpperCase()} />
         </div>

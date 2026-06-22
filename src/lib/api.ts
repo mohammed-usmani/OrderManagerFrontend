@@ -79,6 +79,7 @@ export interface BillCharge {
 export interface OrderAPI {
   id: string;
   status: string;
+  order_type: string;
   created_at: string;
   confirmed_at: string | null;
   paid_at: string | null;
