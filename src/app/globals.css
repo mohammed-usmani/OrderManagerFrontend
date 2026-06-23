@@ -267,6 +267,34 @@ body::after {
   [style*="ember-float"] { animation: none !important; opacity: 0 !important; }
 }
 
+/* ---------- Spice Cosmos landing backdrop (three.js) ---------- */
+.cosmos-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+}
+/* Vignette over the WebGL field so foreground type stays legible. */
+.cosmos-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 0%, transparent 35%, rgba(18, 14, 9, 0.55) 100%),
+    linear-gradient(180deg, rgba(18, 14, 9, 0.25), transparent 30%);
+}
+/* Drop-line under the hero scroll hint. */
+@keyframes cosmos-drop {
+  0% { transform: scaleY(0); transform-origin: top; }
+  45% { transform: scaleY(1); transform-origin: top; }
+  55% { transform: scaleY(1); transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+.cosmos-dropline { animation: cosmos-drop 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+@media (prefers-reduced-motion: reduce) { .cosmos-dropline { animation: none; } }
+
 /* Height of the fixed mobile app header — consumed by AdminShell padding and
    the sticky PageHeader offset so they stay in sync if the header resizes. */
 :root {
