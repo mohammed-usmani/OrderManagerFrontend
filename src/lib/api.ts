@@ -98,28 +98,6 @@ export const api = {
   getOrders: (token: string) => apiFetch<OrderAPI[]>("/orders", { token }),
   getOrder: (id: string, token: string) =>
     apiFetch<OrderAPI>(`/orders/${id}`, { token }),
-  getCurrentOrder: (token: string) =>
-    apiFetch<OrderAPI>("/orders/current", { token }),
-  addItemToCart: (
-    token: string,
-    itemId: string,
-    quantity = 1,
-    specialInstructions?: string,
-  ) =>
-    apiFetch<OrderAPI>("/orders/current/items", {
-      method: "POST",
-      token,
-      body: JSON.stringify({
-        item_id: itemId,
-        quantity,
-        special_instructions: specialInstructions ?? null,
-      }),
-    }),
-  removeItemFromCart: (token: string, itemId: string) =>
-    apiFetch<OrderAPI>(`/orders/current/items/${itemId}`, {
-      method: "DELETE",
-      token,
-    }),
   // Public — the voice line is open to anyone. Token is optional (only staff
   // are ever logged in); the backend issues an anonymous ticket either way.
   getWsTicket: (token?: string, timezone?: string, tableToken?: string) =>
@@ -149,15 +127,6 @@ export const api = {
       token,
       body: JSON.stringify({ reason: reason ?? null }),
     }),
-  adminEditOrderItem: (
-    token: string, orderId: string,
-    body: { menu_item_id: string; quantity: number; special_instructions?: string },
-  ) =>
-    apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/items`, {
-      method: "PATCH",
-      token,
-      body: JSON.stringify(body),
-    }),
   adminVoidOrderItem: (token: string, orderId: string, orderItemId: string, reason: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/void-item`, {
       method: "POST",
@@ -175,18 +144,6 @@ export const api = {
       method: "POST",
       token,
       body: JSON.stringify({ reason }),
-    }),
-  adminTransferSession: (token: string, sessionId: string, toTableId: string) =>
-    apiFetch<TableSessionDetailAPI>(`/table-sessions/${sessionId}/transfer`, {
-      method: "POST",
-      token,
-      body: JSON.stringify({ to_table_id: toTableId }),
-    }),
-  adminMergeSession: (token: string, sessionId: string, intoSessionId: string) =>
-    apiFetch<TableSessionDetailAPI>(`/table-sessions/${sessionId}/merge`, {
-      method: "POST",
-      token,
-      body: JSON.stringify({ into_session_id: intoSessionId }),
     }),
   adminAnalyticsSummary: (
     token: string,
@@ -240,11 +197,6 @@ export const api = {
     }
     return (await res.json()) as { image_url: string };
   },
-  adminReembedMenu: (token: string, onlyMissing = false) =>
-    apiFetch<{ embedded: number }>(
-      `/menu/reembed?only_missing=${onlyMissing}`,
-      { method: "POST", token },
-    ),
 
   // Customers (admin)
   adminListCustomers: (
@@ -281,8 +233,6 @@ export const api = {
   adminDeleteFloor: (token: string, id: string) =>
     apiFetch<void>(`/floors/${id}`, { method: "DELETE", token }),
 
-  // Zones (admin)
-  adminListZones: (token: string) => apiFetch<ZoneAPI[]>("/zones", { token }),
   adminCreateZone: (token: string, body: ZoneWriteAPI) =>
     apiFetch<ZoneAPI>("/zones", { method: "POST", token, body: JSON.stringify(body) }),
   adminUpdateZone: (token: string, id: string, body: ZoneWriteAPI) =>
@@ -290,35 +240,16 @@ export const api = {
   adminDeleteZone: (token: string, id: string) =>
     apiFetch<void>(`/zones/${id}`, { method: "DELETE", token }),
 
-  // Tables (admin) + live floor map
-  adminListTables: (token: string, zoneId?: string) =>
-    apiFetch<TableAPI[]>(`/tables${zoneId ? `?zone_id=${encodeURIComponent(zoneId)}` : ""}`, { token }),
   adminCreateTable: (token: string, body: TableWriteAPI) =>
     apiFetch<TableAPI>("/tables", { method: "POST", token, body: JSON.stringify(body) }),
-  adminUpdateTable: (token: string, id: string, body: TableWriteAPI) =>
-    apiFetch<TableAPI>(`/tables/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
   adminDeleteTable: (token: string, id: string) =>
     apiFetch<void>(`/tables/${id}`, { method: "DELETE", token }),
   adminFloorMap: (token: string) => apiFetch<FloorMapFloorAPI[]>("/tables/floor", { token }),
-  /** Alias kept for the floor plan builder — same endpoint, clearer name */
-  adminFloorPlan: (token: string) => apiFetch<FloorMapFloorAPI[]>("/tables/floor", { token }),
   adminSaveTablePositions: (token: string, tables: TablePositionAPI[]) =>
     apiFetch<{ updated: number }>("/tables/positions", {
       method: "PATCH",
       token,
       body: JSON.stringify({ tables }),
-    }),
-  adminBulkUpdateZonePositions: (token: string, body: ZonePositionBulkAPI) =>
-    apiFetch<void>("/zones/positions", {
-      method: "PATCH",
-      token,
-      body: JSON.stringify(body),
-    }),
-  adminBulkUpdateTablePositions: (token: string, body: TablePositionBulkAPI) =>
-    apiFetch<void>("/tables/positions", {
-      method: "PATCH",
-      token,
-      body: JSON.stringify(body),
     }),
   adminGetTableSession: (token: string, id: string) =>
     apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}`, { token }),
@@ -630,28 +561,6 @@ export interface ZoneWriteAPI {
   height?: number | null;
 }
 
-/** Payload for PATCH /zones/positions — bulk move/resize zones */
-export interface ZonePositionBulkAPI {
-  zones: {
-    zone_id: string;
-    pos_x: number;
-    pos_y: number;
-    width: number;
-    height: number;
-  }[];
-}
-
-/** Payload for PATCH /tables/positions — bulk move tables, optionally reassign zone */
-export interface TablePositionBulkAPI {
-  tables: {
-    table_id: string;
-    pos_x: number;
-    pos_y: number;
-    shape?: string;
-    zone_id?: string;
-  }[];
-}
-
 export interface TableAPI {
   id: string;
   zone_id: string;
@@ -741,9 +650,6 @@ export interface FloorMapFloorAPI {
   height: number;
   zones: FloorZoneAPI[];
 }
-
-/** Alias for backwards compat with floor plan builder */
-export type FloorPlanFloorAPI = FloorMapFloorAPI;
 
 export interface TableSessionOrderAPI {
   id: string;

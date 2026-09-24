@@ -147,7 +147,6 @@ const UNKNOWN_STATUS_CONFIG = {
 export function StatusChip({ status }: { status: string }) {
   const known = status in STATUS_CONFIG;
   if (!known && process.env.NODE_ENV === "development") {
-    // eslint-disable-next-line no-console
     console.warn(`[StatusChip] unmapped status: "${status}"`);
   }
   const cfg = known ? STATUS_CONFIG[status] : UNKNOWN_STATUS_CONFIG;
