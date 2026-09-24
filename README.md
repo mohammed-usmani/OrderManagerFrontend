@@ -78,7 +78,7 @@ client/src/
 │                               CommandPalette, keyboard shortcuts, ui primitives
 │
 ├── contexts/
-│   ├── AuthContext.tsx         JWT (localStorage) + role
+│   ├── AuthContext.tsx         signed-in user from GET /auth/me (session cookie)
 │   └── VoiceAgentContext.tsx   ticket, WebSocket, mic, playback, canvas state,
 │                               busy-line retry — survives route changes
 │
@@ -124,6 +124,10 @@ npm run dev
 All three are read client-side; restart `next dev` after changing them.
 
 ---
+
+## Auth
+
+Staff sign in with email and password; the server answers with an **httpOnly session cookie**, so the token never reaches JavaScript or `localStorage`. Every request is sent with `credentials: "include"`, the kitchen stream uses `EventSource` with `withCredentials`, and `AuthContext` learns who's signed in from `GET /auth/me`. The server only accepts cookie-authenticated writes from its configured frontend origins (`CORS_ORIGINS`), so the frontend and API must share a site in production — `order-manager.mohammedusmani.me` and `backend-saffron.mohammedusmani.me`. Locally, `localhost:3000` → `localhost:8000` works the same way.
 
 ## How the voice line works
 
