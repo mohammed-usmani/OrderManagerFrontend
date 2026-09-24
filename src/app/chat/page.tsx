@@ -103,7 +103,6 @@ function GuestActions({ ctx }: { ctx: TableContext }) {
         <BillingModal
           target={{ session_id: tab.session_id }}
           title={`Pay · Table ${tab.table_label}`}
-          token={null}
           allowCash={false}
           onClose={() => setPaying(false)}
           onPaid={() => { setPaying(false); setTab(null); }}

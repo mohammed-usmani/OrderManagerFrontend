@@ -12,18 +12,18 @@ import { canAccess, defaultRouteForRole, isStaffRole } from "@/lib/adminRoutes";
  * keeps non-admins out of the admin UI and removes the redirect boilerplate
  * that was previously copy-pasted into every admin page.
  *
- * Safe to check synchronously: AuthProvider withholds its children until the
- * stored token is resolved (`ready`), so isAuthenticated/user are settled on
- * the first render reached here.
+ * Waits for `ready` (GET /auth/me answered) before deciding, so a signed-in
+ * user isn't bounced to sign-in during the session round-trip.
  */
 export function AdminGuard({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, ready } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   const staff = isStaffRole(user?.role);
 
   useEffect(() => {
+    if (!ready) return;
     if (!isAuthenticated) {
       router.replace("/auth/signin");
       return;
@@ -37,9 +37,9 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     if (user && staff && !canAccess(pathname, user.role)) {
       router.replace(defaultRouteForRole(user.role));
     }
-  }, [isAuthenticated, user, staff, pathname, router]);
+  }, [ready, isAuthenticated, user, staff, pathname, router]);
 
-  if (!isAuthenticated || !staff) return null;
+  if (!ready || !isAuthenticated || !staff) return null;
   if (user && !canAccess(pathname, user.role)) return null;
   return <>{children}</>;
 }

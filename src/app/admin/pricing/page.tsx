@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { api, type ChargeRuleAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/brand";
 import { AppShell } from "@/components/AppShell";
@@ -34,7 +33,6 @@ function previewBill(
 }
 
 export default function AdminPricingPage() {
-  const { token } = useAuth();
 
   const [charges, setCharges] = useState<ChargeRuleAPI[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<ChargeRuleAPI[]>([]);
@@ -44,9 +42,8 @@ export default function AdminPricingPage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
     try {
-      const res = await api.adminGetChargePolicy(token);
+      const res = await api.adminGetChargePolicy();
       setCharges(res.charges);
       setSavedSnapshot(res.charges);
       setError("");
@@ -55,7 +52,7 @@ export default function AdminPricingPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -75,11 +72,10 @@ export default function AdminPricingPage() {
     ]);
 
   const save = async () => {
-    if (!token) return;
     setSaving(true);
     setError("");
     try {
-      const res = await api.adminUpdateChargePolicy(token, charges);
+      const res = await api.adminUpdateChargePolicy(charges);
       setCharges(res.charges);
       setSavedSnapshot(res.charges);
       setSavedAt(Date.now());

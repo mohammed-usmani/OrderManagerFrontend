@@ -3,25 +3,20 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000
 /** Fired when any apiFetch call receives a 401 — components can subscribe to force-logout. */
 export const onUnauthorized: Array<() => void> = [];
 
-export async function apiFetch<T>(
-  path: string,
-  options?: RequestInit & { token?: string }
-): Promise<T> {
-  const { token, ...rest } = options ?? {};
+export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const rest = options ?? {};
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    // FormData bodies need the browser to set the multipart boundary itself.
+    ...(rest.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     // Bypass ngrok's HTML interstitial so tunneled API calls return JSON, not
     // the "You are about to visit…" page. Harmless on non-ngrok backends.
     "ngrok-skip-browser-warning": "true",
     ...(rest.headers as Record<string, string>),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
+  // Auth is the httpOnly session cookie; the browser attaches it, JS never sees it.
+  const res = await fetch(`${API_URL}${path}`, { ...rest, headers, credentials: "include" });
 
-  const res = await fetch(`${API_URL}${path}`, { ...rest, headers });
-
-  // Expired / invalid token — notify subscribers so they can clear auth state.
+  // Missing / expired session — notify subscribers so they can clear auth state.
   if (res.status === 401) {
     onUnauthorized.forEach((fn) => fn());
     throw new Error("Session expired. Please sign in again.");
@@ -95,15 +90,12 @@ export interface OrderAPI {
 
 export const api = {
   getMenu: () => apiFetch<MenuItemAPI[]>("/menu"),
-  getOrders: (token: string) => apiFetch<OrderAPI[]>("/orders", { token }),
-  getOrder: (id: string, token: string) =>
-    apiFetch<OrderAPI>(`/orders/${id}`, { token }),
-  // Public — the voice line is open to anyone. Token is optional (only staff
-  // are ever logged in); the backend issues an anonymous ticket either way.
-  getWsTicket: (token?: string, timezone?: string, tableToken?: string) =>
+  getOrders: () => apiFetch<OrderAPI[]>("/orders"),
+  getOrder: (id: string) => apiFetch<OrderAPI>(`/orders/${id}`),
+  // Public — the voice line is open to anyone; tickets are always anonymous.
+  getWsTicket: (timezone?: string, tableToken?: string) =>
     apiFetch<{ ticket: string }>("/auth/ws-ticket", {
       method: "POST",
-      token,
       body: JSON.stringify({
         timezone: timezone ?? null,
         table_token: tableToken ?? null,
@@ -111,179 +103,143 @@ export const api = {
     }),
 
   // Admin
-  adminListOrders: (token: string, status: string = "active") =>
-    apiFetch<AdminOrderAPI[]>(`/admin/orders?status=${encodeURIComponent(status)}`, {
-      token,
-    }),
-  adminUpdateOrderStatus: (token: string, orderId: string, status: string) =>
+  adminListOrders: (status: string = "active") =>
+    apiFetch<AdminOrderAPI[]>(`/admin/orders?status=${encodeURIComponent(status)}`),
+  adminUpdateOrderStatus: (orderId: string, status: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/status`, {
       method: "PATCH",
-      token,
       body: JSON.stringify({ status }),
     }),
-  adminCancelOrder: (token: string, orderId: string, reason?: string) =>
+  adminCancelOrder: (orderId: string, reason?: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/cancel`, {
       method: "POST",
-      token,
       body: JSON.stringify({ reason: reason ?? null }),
     }),
-  adminVoidOrderItem: (token: string, orderId: string, orderItemId: string, reason: string) =>
+  adminVoidOrderItem: (orderId: string, orderItemId: string, reason: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/void-item`, {
       method: "POST",
-      token,
       body: JSON.stringify({ order_item_id: orderItemId, reason }),
     }),
-  adminSetItemStatus: (token: string, orderId: string, orderItemId: string, status: string) =>
+  adminSetItemStatus: (orderId: string, orderItemId: string, status: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/item-status`, {
       method: "PATCH",
-      token,
       body: JSON.stringify({ order_item_id: orderItemId, status }),
     }),
-  adminRefundOrder: (token: string, orderId: string, reason: string) =>
+  adminRefundOrder: (orderId: string, reason: string) =>
     apiFetch<AdminOrderAPI>(`/admin/orders/${orderId}/refund`, {
       method: "POST",
-      token,
       body: JSON.stringify({ reason }),
     }),
-  adminAnalyticsSummary: (
-    token: string,
-    range: "today" | "7d" | "30d" | "all" = "today",
-  ) =>
-    apiFetch<AnalyticsSummaryAPI>(
-      `/admin/analytics/summary?range=${range}`,
-      { token },
-    ),
-  adminAnalyticsOverview: (token: string, range = "today") =>
-    apiFetch<AnalyticsOverviewAPI>(`/admin/analytics/overview?range=${range}`, { token }),
-  adminAnalyticsTimeseries: (token: string, range = "30d", granularity = "day") =>
+  adminAnalyticsSummary: (range: "today" | "7d" | "30d" | "all" = "today") =>
+    apiFetch<AnalyticsSummaryAPI>(`/admin/analytics/summary?range=${range}`),
+  adminAnalyticsOverview: (range = "today") =>
+    apiFetch<AnalyticsOverviewAPI>(`/admin/analytics/overview?range=${range}`),
+  adminAnalyticsTimeseries: (range = "30d", granularity = "day") =>
     apiFetch<TimeseriesBucketAPI[]>(
       `/admin/analytics/timeseries?range=${range}&granularity=${granularity}`,
-      { token },
     ),
-  adminAnalyticsPeakHours: (token: string, range = "30d") =>
-    apiFetch<PeakHourAPI[]>(`/admin/analytics/peak-hours?range=${range}`, { token }),
-  adminListMenu: (token: string) =>
-    apiFetch<MenuItemAPI[]>("/admin/menu", { token }),
+  adminAnalyticsPeakHours: (range = "30d") =>
+    apiFetch<PeakHourAPI[]>(`/admin/analytics/peak-hours?range=${range}`),
+  adminListMenu: () =>
+    apiFetch<MenuItemAPI[]>("/admin/menu"),
   // Menu CRUD (admin)
-  adminCreateMenuItem: (token: string, body: MenuItemCreateAPI) =>
+  adminCreateMenuItem: (body: MenuItemCreateAPI) =>
     apiFetch<MenuItemAPI>("/menu", {
       method: "POST",
-      token,
       body: JSON.stringify(body),
     }),
-  adminUpdateMenuItem: (token: string, id: string, body: MenuItemPatchAPI) =>
+  adminUpdateMenuItem: (id: string, body: MenuItemPatchAPI) =>
     apiFetch<MenuItemAPI>(`/menu/${id}`, {
       method: "PATCH",
-      token,
       body: JSON.stringify(body),
     }),
-  adminDisableMenuItem: (token: string, id: string) =>
+  adminDisableMenuItem: (id: string) =>
     apiFetch<void>(`/menu/${id}`, {
       method: "DELETE",
-      token,
     }),
-  adminUploadMenuImage: async (token: string, file: File) => {
+  adminUploadMenuImage: async (file: File) => {
     // Multipart upload — must NOT set Content-Type (browser adds the boundary).
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_URL}/menu/upload-image`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-    return (await res.json()) as { image_url: string };
+    return apiFetch<{ image_url: string }>("/menu/upload-image", { method: "POST", body: form });
   },
 
   // Customers (admin)
-  adminListCustomers: (
-    token: string,
-    opts: { search?: string; limit?: number; offset?: number } = {},
-  ) => {
+  adminListCustomers: (opts: { search?: string; limit?: number; offset?: number } = {}) => {
     const p = new URLSearchParams();
     if (opts.search) p.set("search", opts.search);
     p.set("limit", String(opts.limit ?? 20));
     p.set("offset", String(opts.offset ?? 0));
-    return apiFetch<CustomerPageAPI>(`/customers?${p.toString()}`, { token });
+    return apiFetch<CustomerPageAPI>(`/customers?${p.toString()}`);
   },
-  adminGetCustomerOrders: (token: string, id: string) =>
-    apiFetch<CustomerOrderSummaryAPI[]>(`/customers/${id}/orders`, { token }),
-  adminCreateCustomer: (token: string, body: CustomerWriteAPI) =>
+  adminGetCustomerOrders: (id: string) =>
+    apiFetch<CustomerOrderSummaryAPI[]>(`/customers/${id}/orders`),
+  adminCreateCustomer: (body: CustomerWriteAPI) =>
     apiFetch<CustomerAPI>("/customers", {
       method: "POST",
-      token,
       body: JSON.stringify(body),
     }),
-  adminUpdateCustomer: (token: string, id: string, body: CustomerWriteAPI) =>
+  adminUpdateCustomer: (id: string, body: CustomerWriteAPI) =>
     apiFetch<CustomerAPI>(`/customers/${id}`, {
       method: "PATCH",
-      token,
       body: JSON.stringify(body),
     }),
 
   // Floors (admin)
-  adminListFloors: (token: string) => apiFetch<FloorAPI[]>("/floors", { token }),
-  adminCreateFloor: (token: string, body: FloorWriteAPI) =>
-    apiFetch<FloorAPI>("/floors", { method: "POST", token, body: JSON.stringify(body) }),
-  adminUpdateFloor: (token: string, id: string, body: FloorWriteAPI) =>
-    apiFetch<FloorAPI>(`/floors/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
-  adminDeleteFloor: (token: string, id: string) =>
-    apiFetch<void>(`/floors/${id}`, { method: "DELETE", token }),
+  adminListFloors: () => apiFetch<FloorAPI[]>("/floors"),
+  adminCreateFloor: (body: FloorWriteAPI) =>
+    apiFetch<FloorAPI>("/floors", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdateFloor: (id: string, body: FloorWriteAPI) =>
+    apiFetch<FloorAPI>(`/floors/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeleteFloor: (id: string) =>
+    apiFetch<void>(`/floors/${id}`, { method: "DELETE" }),
 
-  adminCreateZone: (token: string, body: ZoneWriteAPI) =>
-    apiFetch<ZoneAPI>("/zones", { method: "POST", token, body: JSON.stringify(body) }),
-  adminUpdateZone: (token: string, id: string, body: ZoneWriteAPI) =>
-    apiFetch<ZoneAPI>(`/zones/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
-  adminDeleteZone: (token: string, id: string) =>
-    apiFetch<void>(`/zones/${id}`, { method: "DELETE", token }),
+  adminCreateZone: (body: ZoneWriteAPI) =>
+    apiFetch<ZoneAPI>("/zones", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdateZone: (id: string, body: ZoneWriteAPI) =>
+    apiFetch<ZoneAPI>(`/zones/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeleteZone: (id: string) =>
+    apiFetch<void>(`/zones/${id}`, { method: "DELETE" }),
 
-  adminCreateTable: (token: string, body: TableWriteAPI) =>
-    apiFetch<TableAPI>("/tables", { method: "POST", token, body: JSON.stringify(body) }),
-  adminDeleteTable: (token: string, id: string) =>
-    apiFetch<void>(`/tables/${id}`, { method: "DELETE", token }),
-  adminFloorMap: (token: string) => apiFetch<FloorMapFloorAPI[]>("/tables/floor", { token }),
-  adminSaveTablePositions: (token: string, tables: TablePositionAPI[]) =>
+  adminCreateTable: (body: TableWriteAPI) =>
+    apiFetch<TableAPI>("/tables", { method: "POST", body: JSON.stringify(body) }),
+  adminDeleteTable: (id: string) =>
+    apiFetch<void>(`/tables/${id}`, { method: "DELETE" }),
+  adminFloorMap: () => apiFetch<FloorMapFloorAPI[]>("/tables/floor"),
+  adminSaveTablePositions: (tables: TablePositionAPI[]) =>
     apiFetch<{ updated: number }>("/tables/positions", {
       method: "PATCH",
-      token,
       body: JSON.stringify({ tables }),
     }),
-  adminGetTableSession: (token: string, id: string) =>
-    apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}`, { token }),
-  adminSettleTableSession: (token: string, id: string) =>
-    apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}/settle`, { method: "POST", token }),
+  adminGetTableSession: (id: string) =>
+    apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}`),
+  adminSettleTableSession: (id: string) =>
+    apiFetch<TableSessionDetailAPI>(`/table-sessions/${id}/settle`, { method: "POST" }),
   // Public — resolve a scanned table QR token.
   resolveTable: (qrToken: string) =>
     apiFetch<ResolveTableAPI>(`/tables/resolve/${encodeURIComponent(qrToken)}`),
 
   // Pricing / charge policy (admin)
-  adminGetChargePolicy: (token: string) =>
-    apiFetch<{ charges: ChargeRuleAPI[] }>("/settings/charge-policy", { token }),
-  adminUpdateChargePolicy: (token: string, charges: ChargeRuleAPI[]) =>
+  adminGetChargePolicy: () =>
+    apiFetch<{ charges: ChargeRuleAPI[] }>("/settings/charge-policy"),
+  adminUpdateChargePolicy: (charges: ChargeRuleAPI[]) =>
     apiFetch<{ charges: ChargeRuleAPI[] }>("/settings/charge-policy", {
       method: "PUT",
-      token,
       body: JSON.stringify({ charges }),
     }),
 
   // Staff (owner/manager)
-  adminListStaff: (token: string) => apiFetch<StaffAPI[]>("/staff", { token }),
-  adminCreateStaff: (
-    token: string,
-    body: { email: string; name: string; password: string; role: string },
+  adminListStaff: () => apiFetch<StaffAPI[]>("/staff"),
+  adminCreateStaff: (body: { email: string; name: string; password: string; role: string },
   ) =>
-    apiFetch<StaffAPI>("/staff", { method: "POST", token, body: JSON.stringify(body) }),
-  adminUpdateStaffRole: (token: string, id: string, role: string) =>
+    apiFetch<StaffAPI>("/staff", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdateStaffRole: (id: string, role: string) =>
     apiFetch<StaffAPI>(`/staff/${id}`, {
       method: "PATCH",
-      token,
       body: JSON.stringify({ role }),
     }),
-  adminDeleteStaff: (token: string, id: string) =>
-    apiFetch<void>(`/staff/${id}`, { method: "DELETE", token }),
+  adminDeleteStaff: (id: string) =>
+    apiFetch<void>(`/staff/${id}`, { method: "DELETE" }),
 
   // Guest (dine-in, public by QR token)
   guestTab: (qrToken: string) =>
@@ -299,11 +255,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  /** Public for guests; staff pass their token so a discount is accepted. */
-  createRazorpayCheckout: (body: PaymentTargetAPI, token?: string | null) =>
+  /** Public for guests; a staff session cookie lets the server accept a discount. */
+  createRazorpayCheckout: (body: PaymentTargetAPI) =>
     apiFetch<RazorpayCheckoutAPI>("/payments/razorpay/order", {
       method: "POST",
-      token: token ?? undefined,
       body: JSON.stringify(body),
     }),
   verifyRazorpay: (body: {
@@ -315,40 +270,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  settleCash: (token: string, body: PaymentTargetAPI) =>
+  settleCash: (body: PaymentTargetAPI) =>
     apiFetch<{ status: string; amount: number; method: string }>("/payments/cash", {
       method: "POST",
-      token,
       body: JSON.stringify(body),
     }),
 
   // Restaurant profile (public GET; admin PUT)
   getRestaurantProfile: () =>
     apiFetch<RestaurantProfileAPI>("/settings/restaurant"),
-  adminUpdateRestaurantProfile: (token: string, profile: RestaurantProfileAPI) =>
+  adminUpdateRestaurantProfile: (profile: RestaurantProfileAPI) =>
     apiFetch<RestaurantProfileAPI>("/settings/restaurant", {
       method: "PUT",
-      token,
       body: JSON.stringify(profile),
     }),
 
   // Service areas (admin)
-  adminListServiceAreas: (token: string) =>
-    apiFetch<ServiceAreaAPI[]>("/service-areas", { token }),
-  adminCreateServiceArea: (token: string, body: ServiceAreaWriteAPI) =>
+  adminListServiceAreas: () =>
+    apiFetch<ServiceAreaAPI[]>("/service-areas"),
+  adminCreateServiceArea: (body: ServiceAreaWriteAPI) =>
     apiFetch<ServiceAreaAPI>("/service-areas", {
       method: "POST",
-      token,
       body: JSON.stringify(body),
     }),
-  adminUpdateServiceArea: (token: string, id: string, body: ServiceAreaWriteAPI) =>
+  adminUpdateServiceArea: (id: string, body: ServiceAreaWriteAPI) =>
     apiFetch<ServiceAreaAPI>(`/service-areas/${id}`, {
       method: "PATCH",
-      token,
       body: JSON.stringify(body),
     }),
-  adminDeleteServiceArea: (token: string, id: string) =>
-    apiFetch<void>(`/service-areas/${id}`, { method: "DELETE", token }),
+  adminDeleteServiceArea: (id: string) =>
+    apiFetch<void>(`/service-areas/${id}`, { method: "DELETE" }),
 };
 
 // Admin types

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { api, type ServiceAreaAPI, type ServiceAreaWriteAPI } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -9,7 +8,6 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, StatusChip } from "@/components/admin/ui";
 
 export default function AdminServiceAreasPage() {
-  const { token } = useAuth();
 
   const [areas, setAreas] = useState<ServiceAreaAPI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,16 +18,15 @@ export default function AdminServiceAreasPage() {
   const [deleteTarget, setDeleteTarget] = useState<ServiceAreaAPI | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
     try {
-      setAreas(await api.adminListServiceAreas(token));
+      setAreas(await api.adminListServiceAreas());
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -43,10 +40,9 @@ export default function AdminServiceAreasPage() {
     });
 
   const toggleActive = async (a: ServiceAreaAPI) => {
-    if (!token) return;
     markBusy(a.id, true);
     try {
-      await api.adminUpdateServiceArea(token, a.id, { active: !a.active });
+      await api.adminUpdateServiceArea(a.id, { active: !a.active });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -56,10 +52,9 @@ export default function AdminServiceAreasPage() {
   };
 
   const remove = async (a: ServiceAreaAPI) => {
-    if (!token) return;
     markBusy(a.id, true);
     try {
-      await api.adminDeleteServiceArea(token, a.id);
+      await api.adminDeleteServiceArea(a.id);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -159,7 +154,6 @@ export default function AdminServiceAreasPage() {
         {editing && (
           <ServiceAreaModal
             area={editing}
-            token={token ?? ""}
             onClose={() => setEditing(null)}
             onSaved={() => {
               setEditing(null);
@@ -170,7 +164,6 @@ export default function AdminServiceAreasPage() {
         {createOpen && (
           <ServiceAreaModal
             area={null}
-            token={token ?? ""}
             onClose={() => setCreateOpen(false)}
             onSaved={() => {
               setCreateOpen(false);
@@ -204,12 +197,10 @@ export default function AdminServiceAreasPage() {
 
 function ServiceAreaModal({
   area,
-  token,
   onClose,
   onSaved,
 }: {
   area: ServiceAreaAPI | null;
-  token: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -237,8 +228,8 @@ function ServiceAreaModal({
     setBusy(true);
     setErr("");
     try {
-      if (isEdit) await api.adminUpdateServiceArea(token, area!.id, body);
-      else await api.adminCreateServiceArea(token, body);
+      if (isEdit) await api.adminUpdateServiceArea(area!.id, body);
+      else await api.adminCreateServiceArea(body);
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

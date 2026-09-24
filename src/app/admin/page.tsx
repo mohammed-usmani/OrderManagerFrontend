@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { api, type AnalyticsSummaryAPI } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -40,7 +39,6 @@ const DOT: Record<string, string> = {
 const REFRESH_MS = 30000;
 
 export default function AdminDashboardPage() {
-  const { token } = useAuth();
 
   const [range, setRange] = useState<Range>("today");
   const [summary, setSummary] = useState<AnalyticsSummaryAPI | null>(null);
@@ -49,10 +47,9 @@ export default function AdminDashboardPage() {
 
   const reqRef = useRef(0);
   const load = useCallback(async () => {
-    if (!token) return;
     const reqId = ++reqRef.current;
     try {
-      const data = await api.adminAnalyticsSummary(token, range);
+      const data = await api.adminAnalyticsSummary(range);
       if (reqRef.current !== reqId) return; // stale response, discard
       setSummary(data);
       setError("");
@@ -62,7 +59,7 @@ export default function AdminDashboardPage() {
     } finally {
       if (reqRef.current === reqId) setLoading(false);
     }
-  }, [token, range]);
+  }, [range]);
 
   useEffect(() => {
     setLoading(true);

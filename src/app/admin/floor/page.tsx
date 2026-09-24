@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
   SHAPE_OPTIONS,
@@ -30,7 +29,6 @@ const ZONE_COLORS = ["#cfe8ff", "#ffe0c2", "#d6f5d6", "#f3d6f0", "#fff3bf", "#d6
 type Draft = { pos_x: number | null; pos_y: number | null; shape: TableShape | null; zone_id: string };
 
 export default function AdminFloorPage() {
-  const { token } = useAuth();
 
   const [floors, setFloors] = useState<FloorMapFloorAPI[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -50,9 +48,8 @@ export default function AdminFloorPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "zone" | "table"; id: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
     try {
-      const data = await api.adminFloorMap(token);
+      const data = await api.adminFloorMap();
       setFloors(data);
       setActiveId((cur) => cur ?? data[0]?.id ?? null);
       setError("");
@@ -61,7 +58,7 @@ export default function AdminFloorPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -86,7 +83,7 @@ export default function AdminFloorPage() {
     },
     [editing, load],
   );
-  useOrderStream(token, onStream);
+  useOrderStream(onStream);
 
   const activeFloor = floors.find((f) => f.id === activeId) ?? floors[0] ?? null;
   const zoneColor = useMemo(() => {
@@ -114,7 +111,6 @@ export default function AdminFloorPage() {
     load();
   };
   const saveLayout = async () => {
-    if (!token) return;
     setSaving(true);
     try {
       // Include ALL draft entries — placed ones send pos_x/pos_y, unplaced ones
@@ -127,7 +123,7 @@ export default function AdminFloorPage() {
           ? { pos_x: d.pos_x, pos_y: d.pos_y }
           : {}),
       }));
-      const res = await api.adminSaveTablePositions(token, updates);
+      const res = await api.adminSaveTablePositions(updates);
       if (res.updated < updates.length) {
         setError(`Saved ${res.updated} of ${updates.length} tables — some changes may not have applied.`);
       } else {
@@ -333,7 +329,6 @@ export default function AdminFloorPage() {
         {openSessionId && (
           <SettleModal
             sessionId={openSessionId}
-            token={token ?? ""}
             onClose={() => setOpenSessionId(null)}
             onTakePayment={(id) => { setOpenSessionId(null); setBillingSession(id); }}
           />
@@ -342,17 +337,16 @@ export default function AdminFloorPage() {
           <BillingModal
             target={{ session_id: billingSession }}
             title="Settle table"
-            token={token}
+            staff
             onClose={() => setBillingSession(null)}
             onPaid={() => { setBillingSession(null); load(); }}
           />
         )}
         {manageFloors && (
-          <ManageFloorsModal token={token ?? ""} onClose={() => setManageFloors(false)} onChanged={load} />
+          <ManageFloorsModal onClose={() => setManageFloors(false)} onChanged={load} />
         )}
         {addTableZoneId && activeFloor && (
           <AddTableModal
-            token={token ?? ""}
             floor={activeFloor}
             defaultZoneId={addTableZoneId}
             onClose={() => setAddTableZoneId(null)}
@@ -361,7 +355,6 @@ export default function AdminFloorPage() {
         )}
         {zoneModal && activeFloor && (
           <ZoneModal
-            token={token ?? ""}
             zone={zoneModal === "new" ? null : zoneModal}
             floorId={activeFloor.id ?? ""}
             onClose={() => setZoneModal(null)}
@@ -372,12 +365,11 @@ export default function AdminFloorPage() {
           <DeleteConfirmModal
             type={deleteConfirm.type}
             name={deleteConfirm.name}
-            token={token ?? ""}
             id={deleteConfirm.id}
             onConfirm={async () => {
               try {
-                if (deleteConfirm.type === "table") await api.adminDeleteTable(token ?? "", deleteConfirm.id);
-                else await api.adminDeleteZone(token ?? "", deleteConfirm.id);
+                if (deleteConfirm.type === "table") await api.adminDeleteTable(deleteConfirm.id);
+                else await api.adminDeleteZone(deleteConfirm.id);
                 setDeleteConfirm(null);
                 load();
               } catch (e) {
@@ -528,7 +520,7 @@ function EditPanel({
   );
 }
 
-function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClose: () => void; onChanged: () => void }) {
+function ManageFloorsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [floors, setFloors] = useState<FloorAPI[]>([]);
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
@@ -539,15 +531,15 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
   const [pendingDelete, setPendingDelete] = useState<FloorAPI | null>(null);
 
   const reload = useCallback(async () => {
-    try { setFloors(await api.adminListFloors(token)); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-  }, [token]);
+    try { setFloors(await api.adminListFloors()); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  }, []);
   useEffect(() => { reload(); }, [reload]);
 
   const add = async () => {
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
-      await api.adminCreateFloor(token, { name: name.trim(), display_order: floors.length });
+      await api.adminCreateFloor({ name: name.trim(), display_order: floors.length });
       setName(""); await reload(); onChanged();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -557,7 +549,7 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
     if (!renamingId || !draftName.trim() || busy) return;
     setBusy(true);
     try {
-      await api.adminUpdateFloor(token, renamingId, { name: draftName.trim() } as FloorWriteAPI);
+      await api.adminUpdateFloor(renamingId, { name: draftName.trim() } as FloorWriteAPI);
       setRenamingId(null); await reload(); onChanged();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -566,7 +558,7 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
     if (!pendingDelete || busy) return;
     setBusy(true);
     try {
-      await api.adminDeleteFloor(token, pendingDelete.id);
+      await api.adminDeleteFloor(pendingDelete.id);
       setPendingDelete(null); await reload(); onChanged();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setPendingDelete(null); }
     finally { setBusy(false); }
@@ -642,12 +634,10 @@ function ManageFloorsModal({ token, onClose, onChanged }: { token: string; onClo
 
 function SettleModal({
   sessionId,
-  token,
   onClose,
   onTakePayment,
 }: {
   sessionId: string;
-  token: string;
   onClose: () => void;
   onTakePayment: (sessionId: string) => void;
 }) {
@@ -657,11 +647,11 @@ function SettleModal({
   useEffect(() => {
     let alive = true;
     api
-      .adminGetTableSession(token, sessionId)
+      .adminGetTableSession(sessionId)
       .then((d) => alive && setDetail(d))
       .catch((e) => alive && setErr(e instanceof Error ? e.message : String(e)));
     return () => { alive = false; };
-  }, [token, sessionId]);
+  }, [sessionId]);
 
   const title = detail
     ? `Table ${detail.table_label ?? "?"}${detail.floor_name ? ` · ${detail.floor_name}` : ""}${detail.is_ac ? " · AC" : ""} — the check`
@@ -721,13 +711,11 @@ function SettleModal({
 // ─── AddTableModal ─────────────────────────────────────────────────────────────
 
 function AddTableModal({
-  token,
   floor,
   defaultZoneId,
   onClose,
   onSaved,
 }: {
-  token: string;
   floor: FloorMapFloorAPI;
   defaultZoneId: string;
   onClose: () => void;
@@ -764,7 +752,7 @@ function AddTableModal({
     setBusy(true);
     setErr("");
     try {
-      await api.adminCreateTable(token, {
+      await api.adminCreateTable({
         zone_id: zoneId,
         label: label.trim(),
         seats,
@@ -868,13 +856,11 @@ function AddTableModal({
 // ─── ZoneModal ─────────────────────────────────────────────────────────────────
 
 function ZoneModal({
-  token,
   zone,
   floorId,
   onClose,
   onSaved,
 }: {
-  token: string;
   zone: FloorZoneAPI | null;
   floorId: string;
   onClose: () => void;
@@ -899,9 +885,9 @@ function ZoneModal({
         ...(floorId ? { floor_id: floorId } : {}),
       };
       if (isEdit) {
-        await api.adminUpdateZone(token, zone!.id, body);
+        await api.adminUpdateZone(zone!.id, body);
       } else {
-        await api.adminCreateZone(token, body);
+        await api.adminCreateZone(body);
       }
       onSaved();
     } catch (e) {
@@ -973,7 +959,6 @@ function DeleteConfirmModal({
 }: {
   type: "zone" | "table";
   name: string;
-  token: string;
   id: string;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;

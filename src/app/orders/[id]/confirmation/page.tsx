@@ -36,7 +36,7 @@ function OrderIdBadge({ id }: { id: string }) {
 }
 
 export default function OrderConfirmationPage() {
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated, ready } = useAuth();
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
@@ -48,20 +48,21 @@ export default function OrderConfirmationPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!ready) return;
     if (!isAuthenticated) {
       router.replace("/auth/signin");
       return;
     }
     // Profile is best-effort (the receipt falls back to BRAND); never block on it.
     api.getRestaurantProfile().then(setProfile).catch(() => {});
-    Promise.all([api.getOrder(orderId, token!), api.getMenu()])
+    Promise.all([api.getOrder(orderId), api.getMenu()])
       .then(([ord, menuItems]) => {
         setOrder(ord);
         setMenu(menuItems);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [isAuthenticated, token, orderId, router]);
+  }, [ready, isAuthenticated, orderId, router]);
 
   if (!isAuthenticated) return null;
 

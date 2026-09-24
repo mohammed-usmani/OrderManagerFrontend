@@ -26,30 +26,28 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 export default function AdminStaffPage() {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [staff, setStaff] = useState<StaffAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(async () => {
-    if (!token) return;
     try {
-      setStaff(await api.adminListStaff(token));
+      setStaff(await api.adminListStaff());
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const changeRole = async (id: string, role: string) => {
-    if (!token) return;
     try {
-      await api.adminUpdateStaffRole(token, id, role);
+      await api.adminUpdateStaffRole(id, role);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -57,9 +55,8 @@ export default function AdminStaffPage() {
   };
 
   const remove = async (id: string) => {
-    if (!token) return;
     try {
-      await api.adminDeleteStaff(token, id);
+      await api.adminDeleteStaff(id);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -148,7 +145,6 @@ export default function AdminStaffPage() {
 
         {addOpen && (
           <AddStaffModal
-            token={token ?? ""}
             onClose={() => setAddOpen(false)}
             onSaved={() => { setAddOpen(false); load(); }}
           />
@@ -158,7 +154,7 @@ export default function AdminStaffPage() {
   );
 }
 
-function AddStaffModal({ token, onClose, onSaved }: { token: string; onClose: () => void; onSaved: () => void }) {
+function AddStaffModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -174,7 +170,7 @@ function AddStaffModal({ token, onClose, onSaved }: { token: string; onClose: ()
     setBusy(true);
     setErr("");
     try {
-      await api.adminCreateStaff(token, { email: email.trim().toLowerCase(), name: name.trim(), password, role });
+      await api.adminCreateStaff({ email: email.trim().toLowerCase(), name: name.trim(), password, role });
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

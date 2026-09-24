@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
   type MenuItemAPI,
@@ -30,7 +29,6 @@ type SortDir = "asc" | "desc";
 const CATEGORIES = ["starters", "mains", "breads", "rice", "desserts", "beverages"];
 
 export default function AdminMenuPage() {
-  const { token } = useAuth();
 
   const [items, setItems] = useState<MenuItemAPI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,9 +57,8 @@ export default function AdminMenuPage() {
   const [cellError, setCellError] = useState(false);
 
   const load = useCallback(async () => {
-    if (!token) return;
     try {
-      const data = await api.adminListMenu(token);
+      const data = await api.adminListMenu();
       setItems(data);
       setError("");
     } catch (e) {
@@ -69,7 +66,7 @@ export default function AdminMenuPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -114,10 +111,9 @@ export default function AdminMenuPage() {
 
   const patchItem = useCallback(
     async (id: string, body: MenuItemPatchAPI) => {
-      if (!token) return;
       markBusy([id], true);
       try {
-        await api.adminUpdateMenuItem(token, id, body);
+        await api.adminUpdateMenuItem(id, body);
         await load();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -125,18 +121,17 @@ export default function AdminMenuPage() {
         markBusy([id], false);
       }
     },
-    [token, load]
+    [load]
   );
 
   const toggleAvailability = useCallback(
     async (item: MenuItemAPI) => {
-      if (!token) return;
       markBusy([item.id], true);
       try {
         if (item.available) {
-          await api.adminDisableMenuItem(token, item.id);
+          await api.adminDisableMenuItem(item.id);
         } else {
-          await api.adminUpdateMenuItem(token, item.id, { available: true });
+          await api.adminUpdateMenuItem(item.id, { available: true });
         }
         await load();
       } catch (e) {
@@ -145,20 +140,20 @@ export default function AdminMenuPage() {
         markBusy([item.id], false);
       }
     },
-    [token, load]
+    [load]
   );
 
   const bulkSetAvailability = useCallback(
     async (available: boolean) => {
-      if (!token || selected.size === 0) return;
+      if (selected.size === 0) return;
       const ids = Array.from(selected);
       markBusy(ids, true);
       try {
         const results = await Promise.allSettled(
           ids.map((id) =>
             available
-              ? api.adminUpdateMenuItem(token, id, { available: true })
-              : api.adminDisableMenuItem(token, id)
+              ? api.adminUpdateMenuItem(id, { available: true })
+              : api.adminDisableMenuItem(id)
           )
         );
         const failed = results.filter((r) => r.status === "rejected").length;
@@ -176,7 +171,7 @@ export default function AdminMenuPage() {
         await load();
       }
     },
-    [token, selected, load]
+    [selected, load]
   );
 
   // --- Inline cell edit ---
@@ -524,7 +519,6 @@ export default function AdminMenuPage() {
             load();
           }}
           existingIds={items.map((i) => i.id)}
-          token={token ?? ""}
         />
         <EditItemModal
           item={editingItem}
@@ -533,7 +527,6 @@ export default function AdminMenuPage() {
             setEditingItem(null);
             load();
           }}
-          token={token ?? ""}
         />
       </AdminShell>
     </AppShell>
@@ -651,12 +644,10 @@ function EditItemModal({
   item,
   onClose,
   onSaved,
-  token,
 }: {
   item: MenuItemAPI | null;
   onClose: () => void;
   onSaved: () => void;
-  token: string;
 }) {
   const [form, setForm] = useState<MenuItemPatchAPI>({});
   const [dietaryStr, setDietaryStr] = useState("");
@@ -687,11 +678,11 @@ function EditItemModal({
   }, [item]);
 
   const onPickImage = async (file: File | undefined) => {
-    if (!file || !token) return;
+    if (!file) return;
     setUploading(true);
     setErr("");
     try {
-      const { image_url } = await api.adminUploadMenuImage(token, file);
+      const { image_url } = await api.adminUploadMenuImage(file);
       setForm((f) => ({ ...f, image_url }));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -701,13 +692,13 @@ function EditItemModal({
   };
 
   const submit = async () => {
-    if (!item || !token) return;
+    if (!item) return;
     if (!form.name || !form.category) { setErr("Name and category are required."); return; }
     const dietary = dietaryStr.split(",").map((s) => s.trim()).filter(Boolean);
     setBusy(true);
     setErr("");
     try {
-      await api.adminUpdateMenuItem(token, item.id, { ...form, dietary: dietary.length ? dietary : null });
+      await api.adminUpdateMenuItem(item.id, { ...form, dietary: dietary.length ? dietary : null });
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -845,13 +836,11 @@ function CreateItemModal({
   onClose,
   onCreated,
   existingIds,
-  token,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
   existingIds: string[];
-  token: string;
 }) {
   const EMPTY: MenuItemCreateAPI = {
     id: "",
@@ -882,7 +871,7 @@ function CreateItemModal({
     setUploading(true);
     setErr("");
     try {
-      const { image_url } = await api.adminUploadMenuImage(token, file);
+      const { image_url } = await api.adminUploadMenuImage(file);
       setForm((f) => ({ ...f, image_url }));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -907,7 +896,7 @@ function CreateItemModal({
     setBusy(true);
     setErr("");
     try {
-      await api.adminCreateMenuItem(token, {
+      await api.adminCreateMenuItem({
         ...form,
         dietary: dietary.length ? dietary : null,
       });

@@ -9,13 +9,13 @@ import { loadRazorpay, openRazorpay } from "@/lib/razorpay";
 /**
  * Reusable settle/checkout dialog. Used by the cashier (dine-in session or a
  * delivered parcel order, `allowCash`) and by the dine-in guest paying from
- * their phone (online only, no token).
+ * their phone (online only, `staff` false).
  */
 export function BillingModal({
   target,
   title,
   subtitle,
-  token,
+  staff = false,
   allowCash = true,
   restaurantName = "Saffron & Smoke",
   onClose,
@@ -24,7 +24,8 @@ export function BillingModal({
   target: { order_id?: string; session_id?: string };
   title: string;
   subtitle?: string;
-  token?: string | null;
+  /** Staff mode: shows discount and cash settle (server enforces both). */
+  staff?: boolean;
   allowCash?: boolean;
   restaurantName?: string;
   onClose: () => void;
@@ -50,11 +51,11 @@ export function BillingModal({
   const payload = (): PaymentTargetAPI => ({ ...target, tip, discount });
 
   const payCash = async () => {
-    if (!token) return;
+    if (!staff) return;
     setBusy(true);
     setErr("");
     try {
-      await api.settleCash(token, payload());
+      await api.settleCash(payload());
       onPaid();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -66,7 +67,7 @@ export function BillingModal({
     setBusy(true);
     setErr("");
     try {
-      const co = await api.createRazorpayCheckout(payload(), token);
+      const co = await api.createRazorpayCheckout(payload());
       await loadRazorpay();
       openRazorpay({
         key: co.key_id,
@@ -109,19 +110,19 @@ export function BillingModal({
 
       <div className="space-y-3">
         {/* Discounts are staff-only (the server rejects them from guests). */}
-        <div className={`grid gap-3 ${token ? "grid-cols-2" : "grid-cols-1"}`}>
+        <div className={`grid gap-3 ${staff ? "grid-cols-2" : "grid-cols-1"}`}>
           <label className="block">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Tip</span>
             <Input type="number" min={0} value={String(tip)} onChange={numField(tip, setTip)} className="w-full mt-1" />
           </label>
-          {token && (
+          {staff && (
             <label className="block">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Discount</span>
               <Input type="number" min={0} value={String(discount)} onChange={numField(discount, setDiscount)} className="w-full mt-1" />
             </label>
           )}
         </div>
-        {token && discount > 0 && (
+        {staff && discount > 0 && (
           <Input value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} placeholder="Reason for discount (optional)" className="w-full" />
         )}
 
@@ -138,7 +139,7 @@ export function BillingModal({
               {busy ? "Opening…" : "Pay online (UPI / card)"}
             </Button>
           )}
-          {allowCash && token && (
+          {allowCash && staff && (
             <Button variant="secondary" icon="payments" onClick={payCash} disabled={busy || amount == null}>
               Mark cash paid
             </Button>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
   type CustomerAPI,
@@ -15,7 +14,6 @@ import { Button, Card, CardHeader, Input, Modal, Pager, StatusChip, Toolbar, Emp
 import { formatPrice } from "@/lib/brand";
 
 export default function AdminCustomersPage() {
-  const { token } = useAuth();
 
   const PAGE_SIZE = 20;
   const [customers, setCustomers] = useState<CustomerAPI[]>([]);
@@ -31,10 +29,9 @@ export default function AdminCustomersPage() {
 
   const load = useCallback(
     async (q: string, pageArg: number) => {
-      if (!token) return;
       setSearching(true);
       try {
-        const data = await api.adminListCustomers(token, {
+        const data = await api.adminListCustomers({
           search: q || undefined,
           limit: PAGE_SIZE,
           offset: (pageArg - 1) * PAGE_SIZE,
@@ -49,7 +46,7 @@ export default function AdminCustomersPage() {
         setSearching(false);
       }
     },
-    [token],
+    [],
   );
 
   // Debounce the search box and snap back to the first page on a new query.
@@ -200,7 +197,6 @@ export default function AdminCustomersPage() {
         {editing && (
           <CustomerModal
             customer={editing}
-            token={token ?? ""}
             onClose={() => setEditing(null)}
             onSaved={() => {
               setEditing(null);
@@ -211,7 +207,6 @@ export default function AdminCustomersPage() {
         {createOpen && (
           <CustomerModal
             customer={null}
-            token={token ?? ""}
             onClose={() => setCreateOpen(false)}
             onSaved={() => {
               setCreateOpen(false);
@@ -240,12 +235,10 @@ const FIELDS: { key: keyof CustomerWriteAPI; label: string; full?: boolean }[] =
 
 function CustomerModal({
   customer,
-  token,
   onClose,
   onSaved,
 }: {
   customer: CustomerAPI | null;
-  token: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -266,21 +259,21 @@ function CustomerModal({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!customer || !token) return;
+    if (!customer) return;
     api
-      .adminGetCustomerOrders(token, customer.id)
+      .adminGetCustomerOrders(customer.id)
       .then(setOrders)
       .catch(() => setOrders([]));
-  }, [customer, token]);
+  }, [customer]);
 
   const submit = async () => {
     setBusy(true);
     setErr("");
     try {
       if (isEdit) {
-        await api.adminUpdateCustomer(token, customer!.id, form);
+        await api.adminUpdateCustomer(customer!.id, form);
       } else {
-        await api.adminCreateCustomer(token, form);
+        await api.adminCreateCustomer(form);
       }
       onSaved();
     } catch (e) {

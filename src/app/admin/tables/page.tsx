@@ -12,7 +12,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
   type FloorMapFloorAPI,
@@ -57,7 +56,6 @@ const STATUS_META: Record<TableStatus, { label: string; dot: string; bg: string;
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminTablesPage() {
-  const { token } = useAuth();
   const router = useRouter();
 
   const [floors, setFloors] = useState<FloorMapFloorAPI[]>([]);
@@ -71,9 +69,8 @@ export default function AdminTablesPage() {
   const [qrTable, setQrTable] = useState<{ table: FloorTableAPI; zoneName: string } | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
     try {
-      const data = await api.adminFloorMap(token);
+      const data = await api.adminFloorMap();
       setFloors(data);
       setActiveFloorId((cur) => cur ?? data[0]?.id ?? null);
       setError("");
@@ -82,7 +79,7 @@ export default function AdminTablesPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -93,7 +90,7 @@ export default function AdminTablesPage() {
   }, [load]);
 
   // Real-time refresh on settle / bill-request / status changes.
-  useOrderStream(token, load);
+  useOrderStream(load);
 
   const activeFloor = floors.find((f) => f.id === activeFloorId) ?? floors[0] ?? null;
 
@@ -249,7 +246,6 @@ export default function AdminTablesPage() {
         {settleSessionId && (
           <SettleModal
             sessionId={settleSessionId}
-            token={token ?? ""}
             onClose={() => setSettleSessionId(null)}
             onSettled={() => { setSettleSessionId(null); load(); }}
           />
@@ -399,12 +395,10 @@ function TableCard({
 
 function SettleModal({
   sessionId,
-  token,
   onClose,
   onSettled,
 }: {
   sessionId: string;
-  token: string;
   onClose: () => void;
   onSettled: () => void;
 }) {
@@ -415,17 +409,17 @@ function SettleModal({
   useEffect(() => {
     let alive = true;
     api
-      .adminGetTableSession(token, sessionId)
+      .adminGetTableSession(sessionId)
       .then((d) => alive && setDetail(d))
       .catch((e) => alive && setErr(e instanceof Error ? e.message : String(e)));
     return () => { alive = false; };
-  }, [token, sessionId]);
+  }, [sessionId]);
 
   const settle = async () => {
     setBusy(true);
     setErr("");
     try {
-      await api.adminSettleTableSession(token, sessionId);
+      await api.adminSettleTableSession(sessionId);
       onSettled();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

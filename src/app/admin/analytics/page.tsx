@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
   type AnalyticsOverviewAPI,
@@ -37,7 +36,6 @@ const RANGE_GRAN: Record<Range, Gran> = {
 };
 
 export default function AdminAnalyticsPage() {
-  const { token } = useAuth();
 
   const [range, setRange] = useState<Range>("30d");
   const [overview, setOverview] = useState<AnalyticsOverviewAPI | null>(null);
@@ -47,7 +45,6 @@ export default function AdminAnalyticsPage() {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    if (!token) return;
     // Capture the range at call time; ignore stale responses if the user
     // switched ranges while the request was in-flight.
     const requestedRange = range;
@@ -55,9 +52,9 @@ export default function AdminAnalyticsPage() {
     try {
       const gran = RANGE_GRAN[requestedRange];
       const [o, s, h] = await Promise.all([
-        api.adminAnalyticsOverview(token, requestedRange),
-        api.adminAnalyticsTimeseries(token, requestedRange, gran),
-        api.adminAnalyticsPeakHours(token, requestedRange),
+        api.adminAnalyticsOverview(requestedRange),
+        api.adminAnalyticsTimeseries(requestedRange, gran),
+        api.adminAnalyticsPeakHours(requestedRange),
       ]);
       // Only commit if the user has not switched to another range in the meantime.
       setRange((currentRange) => {
@@ -73,7 +70,7 @@ export default function AdminAnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, range]);
+  }, [range]);
 
   useEffect(() => {
     load();

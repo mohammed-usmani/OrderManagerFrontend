@@ -239,7 +239,7 @@ function isUIEvent(x: unknown): x is UIEventMessage {
 }
 
 export function VoiceAgentProvider({ children }: { children: React.ReactNode }) {
-  const { token, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [status, setStatus] = useState<AgentStatus>("disconnected");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [canvas, setCanvas] = useState<CanvasState>({ kind: "idle" });
@@ -688,8 +688,8 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    // The voice line is public — fetch an anonymous ws-ticket (token is only
-    // present for logged-in staff). The backend requires a ticket but no auth.
+    // The voice line is public — fetch a ws-ticket (the session cookie rides
+    // along for logged-in staff). The backend requires a ticket but no auth.
     let wsUrl = WS_URL;
     // Dine-in calls carry the scanned table's token (sessionStorage is the
     // source of truth so a stale closure can't bind the wrong table).
@@ -701,11 +701,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       /* ignore */
     }
     try {
-      const { ticket } = await api.getWsTicket(
-        token ?? undefined,
-        getUserTimezone(),
-        tableToken,
-      );
+      const { ticket } = await api.getWsTicket(getUserTimezone(), tableToken);
       wsUrl = `${WS_URL}?ticket=${ticket}&cid=${encodeURIComponent(getClientId())}`;
     } catch {
       stopMicStream();
@@ -789,7 +785,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
       }
     };
     ws.onerror = () => ws.close();
-  }, [startMic, handleMessage, token, disconnectVoice, clearWarning, closeAudioContext, cancelQueue, stopMicStream, releaseMedia]);
+  }, [startMic, handleMessage, disconnectVoice, clearWarning, closeAudioContext, cancelQueue, stopMicStream, releaseMedia]);
 
   // Keep a stable ref so queue retries can re-invoke the latest connect().
   connectRef.current = connect;

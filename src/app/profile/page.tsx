@@ -6,14 +6,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AppShell } from "@/components/AppShell";
 
 export default function ProfilePage() {
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, ready, user, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (ready && !isAuthenticated) {
       router.replace("/auth/signin");
     }
-  }, [isAuthenticated, router]);
+  }, [ready, isAuthenticated, router]);
 
   if (!isAuthenticated || !user) return null;
 

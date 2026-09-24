@@ -17,13 +17,14 @@ const STATUS_STYLE: Record<string, { label: string; classes: string; icon: strin
 };
 
 export default function OrdersPage() {
-  const { isAuthenticated, token, user } = useAuth();
+  const { isAuthenticated, ready, user } = useAuth();
   const router = useRouter();
   const [orders, setOrders] = useState<OrderAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!ready) return;
     if (!isAuthenticated) {
       router.replace("/auth/signin");
       return;
@@ -34,14 +35,14 @@ export default function OrdersPage() {
       return;
     }
     api
-      .getOrders(token!)
+      .getOrders()
       .then((data) => {
         // Show all orders that have items; hide empty carts
         setOrders(data.filter((o) => o.status !== "cart" || o.items.length > 0));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [isAuthenticated, user, token, router]);
+  }, [ready, isAuthenticated, user, router]);
 
   if (!isAuthenticated) return null;
 

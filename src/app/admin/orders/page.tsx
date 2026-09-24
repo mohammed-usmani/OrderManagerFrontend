@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { api, type AdminOrderAPI, type AdminOrderItemAPI, type OrderStatus } from "@/lib/api";
 import { formatDate, formatAge, orderAgeUrgency } from "@/lib/datetime";
 import { formatPrice } from "@/lib/brand";
@@ -103,7 +102,6 @@ const STATUS_VERB: Partial<Record<OrderStatus, string>> = {
 const REFRESH_MS = 15000;
 
 export default function AdminOrdersPage() {
-  const { token } = useAuth();
 
   const [filter, setFilter]     = useState<Filter>("active");
   const [orders, setOrders]     = useState<AdminOrderAPI[]>([]);
@@ -142,14 +140,13 @@ export default function AdminOrdersPage() {
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
-    if (!token) return;
     if (isFirstLoad.current) {
       setLoading(true);
     } else {
       setRefreshing(true);
     }
     try {
-      const data = await api.adminListOrders(token, filter);
+      const data = await api.adminListOrders(filter);
       // Flag confirmed orders we haven't seen before as "new" (pulse a few sec).
       const fresh = data
         .filter((o) => o.status === "confirmed" && !seenIdsRef.current.has(o.id))
@@ -176,7 +173,7 @@ export default function AdminOrdersPage() {
       setRefreshing(false);
       isFirstLoad.current = false;
     }
-  }, [token, filter]);
+  }, [filter]);
 
   // When filter changes, drop into "first-load" mode so the skeleton shows only
   // if there's no prior data — but keep the previous rows visible (dimmed via the
@@ -194,7 +191,7 @@ export default function AdminOrdersPage() {
 
   // Real-time: refetch instantly on any server-side order change (SSE). The
   // interval above stays as a fallback if the stream drops.
-  useOrderStream(token, load);
+  useOrderStream(load);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -313,7 +310,6 @@ export default function AdminOrdersPage() {
   // Run an order mutation that returns the updated order; patch it into state.
   const applyOrderOp = useCallback(
     async (id: string, op: () => Promise<AdminOrderAPI>) => {
-      if (!token) return;
       markBusy([id], true);
       try {
         const updated = await op();
@@ -325,50 +321,50 @@ export default function AdminOrdersPage() {
         markBusy([id], false);
       }
     },
-    [token, load],
+    [load],
   );
 
   const transition = useCallback(
     (id: string, status: OrderStatus) =>
-      applyOrderOp(id, () => api.adminUpdateOrderStatus(token!, id, status)),
-    [token, applyOrderOp],
+      applyOrderOp(id, () => api.adminUpdateOrderStatus(id, status)),
+    [applyOrderOp],
   );
 
   // Bump a line item along pending → ready → served.
   const bumpItem = useCallback(
     (orderId: string, item: AdminOrderItemAPI) => {
       const next = item.status === "ready" ? "served" : "ready";
-      return applyOrderOp(orderId, () => api.adminSetItemStatus(token!, orderId, item.id, next));
+      return applyOrderOp(orderId, () => api.adminSetItemStatus(orderId, item.id, next));
     },
-    [token, applyOrderOp],
+    [applyOrderOp],
   );
 
   const confirmCancel = useCallback(async () => {
     if (!cancelTarget) return;
     const id = cancelTarget;
     setCancelTarget(null);
-    await applyOrderOp(id, () => api.adminCancelOrder(token!, id, reasonText.trim() || undefined));
+    await applyOrderOp(id, () => api.adminCancelOrder(id, reasonText.trim() || undefined));
     setReasonText("");
-  }, [cancelTarget, reasonText, token, applyOrderOp]);
+  }, [cancelTarget, reasonText, applyOrderOp]);
 
   const confirmRefund = useCallback(async () => {
     if (!refundTarget || !reasonText.trim()) return;
     const id = refundTarget;
     setRefundTarget(null);
-    await applyOrderOp(id, () => api.adminRefundOrder(token!, id, reasonText.trim()));
+    await applyOrderOp(id, () => api.adminRefundOrder(id, reasonText.trim()));
     setReasonText("");
-  }, [refundTarget, reasonText, token, applyOrderOp]);
+  }, [refundTarget, reasonText, applyOrderOp]);
 
   const confirmVoid = useCallback(async () => {
     if (!voidTarget || !reasonText.trim()) return;
     const { orderId, item } = voidTarget;
     setVoidTarget(null);
-    await applyOrderOp(orderId, () => api.adminVoidOrderItem(token!, orderId, item.id, reasonText.trim()));
+    await applyOrderOp(orderId, () => api.adminVoidOrderItem(orderId, item.id, reasonText.trim()));
     setReasonText("");
-  }, [voidTarget, reasonText, token, applyOrderOp]);
+  }, [voidTarget, reasonText, applyOrderOp]);
 
   const bulkCancel = useCallback(async () => {
-    if (!token || selected.size === 0) return;
+    if (selected.size === 0) return;
     // Resolve against visible (filtered) list, not the full orders array.
     const ids = Array.from(selected).filter((id) =>
       visible.find((o) => o.id === id)?.next_statuses.includes("cancelled")
@@ -377,7 +373,7 @@ export default function AdminOrdersPage() {
     markBusy(ids, true);
     try {
       const results = await Promise.allSettled(
-        ids.map((id) => api.adminUpdateOrderStatus(token, id, "cancelled"))
+        ids.map((id) => api.adminUpdateOrderStatus(id, "cancelled"))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
@@ -395,7 +391,7 @@ export default function AdminOrdersPage() {
       markBusy(ids, false);
       await load();
     }
-  }, [token, selected, visible, load]);
+  }, [selected, visible, load]);
 
   const actionable = visible.filter(canAct);
   const allSelected = actionable.length > 0 && actionable.every((o) => selected.has(o.id));
@@ -847,7 +843,7 @@ export default function AdminOrdersPage() {
             target={{ order_id: payTarget.id }}
             title={`Take payment · #${payTarget.id.slice(0, 8).toUpperCase()}`}
             subtitle={payTarget.order_type === "dine_in" ? `Table ${payTarget.table_label ?? "?"}` : payTarget.customer_name || undefined}
-            token={token}
+            staff
             onClose={() => setPayTarget(null)}
             onPaid={() => { setPayTarget(null); load(); }}
           />

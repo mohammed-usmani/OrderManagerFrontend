@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   api,
   type RestaurantProfileAPI,
@@ -40,7 +39,6 @@ const FIELDS: { key: keyof RestaurantProfileAPI; label: string; full?: boolean }
 ];
 
 export default function AdminSettingsPage() {
-  const { token } = useAuth();
   const [profile, setProfile] = useState<RestaurantProfileAPI | null>(null);
   const [saved, setSaved] = useState<RestaurantProfileAPI | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,11 +99,11 @@ export default function AdminSettingsPage() {
     });
 
   const save = async () => {
-    if (!token || !profile) return;
+    if (!profile) return;
     setSaving(true);
     setError("");
     try {
-      const res = await api.adminUpdateRestaurantProfile(token, profile);
+      const res = await api.adminUpdateRestaurantProfile(profile);
       setProfile(res);
       setSaved(res);
       setSavedAt(Date.now());
