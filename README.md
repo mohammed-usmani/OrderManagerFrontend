@@ -109,6 +109,8 @@ EOF
 
 npm run dev
 # → http://localhost:3000
+
+npm test    # node --test, for the pure logic in src/lib
 ```
 
 ---
@@ -119,9 +121,10 @@ npm run dev
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | REST base |
 | `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000/ws` | voice WebSocket |
+| `NEXT_PUBLIC_SITE_URL` | current origin (dev only) | public app URL baked into table QR codes, e.g. `https://order-manager.mohammedusmani.me` |
 | `NEXT_PUBLIC_SHOW_WAKE_UP_GATE` | `0` | Set to `1` when the backend scales to zero (e.g. Cloud Run). Shows a full-screen countdown until `GET /health` responds, so users don't see errors during a cold start. |
 
-All three are read client-side; restart `next dev` after changing them.
+These are inlined at build time; restart `next dev` after changing them. **Production builds (including Vercel previews) fail if `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_WS_URL` is unset**, rather than shipping a build that calls localhost; without `NEXT_PUBLIC_SITE_URL`, table QR printing is disabled. The API URL also feeds the Content-Security-Policy's `connect-src` (see `next.config.ts`).
 
 ---
 
