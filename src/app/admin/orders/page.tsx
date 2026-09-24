@@ -9,35 +9,48 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
 import { useOrderStream } from "@/hooks/useOrderStream";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { BillingModal } from "@/components/admin/BillingModal";
 import { escapeHtml } from "@/lib/html";
 
 // Short two-tone chime for newly-arrived orders (WebAudio — no asset needed).
-function ding() {
+// Browsers keep an AudioContext made without a user gesture suspended (silent),
+// which is what a KDS tablet gets after a reload — so one shared context is
+// created/resumed on user interaction (see unlockChime) and reused.
+let chimeCtx: AudioContext | null = null;
+
+function unlockChime() {
   try {
-    const Ctx = window.AudioContext ||
-      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const now = ctx.currentTime;
-    [880, 1175].forEach((f, i) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = f;
-      o.connect(g);
-      g.connect(ctx.destination);
-      const t = now + i * 0.13;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-      o.start(t);
-      o.stop(t + 0.2);
-    });
-    setTimeout(() => ctx.close().catch(() => {}), 600);
+    if (!chimeCtx) {
+      const Ctx = window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      chimeCtx = new Ctx();
+    }
+    if (chimeCtx.state !== "running") chimeCtx.resume().catch(() => {});
   } catch {
-    /* autoplay blocked / no WebAudio — stay silent */
+    /* no WebAudio — stay silent */
   }
+}
+
+function ding() {
+  const ctx = chimeCtx;
+  if (!ctx || ctx.state !== "running") return; // not unlocked yet
+  const now = ctx.currentTime;
+  [880, 1175].forEach((f, i) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = f;
+    o.connect(g);
+    g.connect(ctx.destination);
+    const t = now + i * 0.13;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.start(t);
+    o.stop(t + 0.2);
+  });
 }
 
 // Open a kitchen order ticket (KOT) in a print window — items + notes only.
@@ -139,7 +152,10 @@ export default function AdminOrdersPage() {
   // Every order id seen on a prior refresh, so we only pulse genuinely-new ones.
   const seenIdsRef = useRef<Set<string>>(new Set());
 
+  // Filter switches can race: only the latest request may write state.
+  const reqRef = useRef(0);
   const load = useCallback(async () => {
+    const reqId = ++reqRef.current;
     if (isFirstLoad.current) {
       setLoading(true);
     } else {
@@ -147,6 +163,7 @@ export default function AdminOrdersPage() {
     }
     try {
       const data = await api.adminListOrders(filter);
+      if (reqRef.current !== reqId) return; // stale response, discard
       // Flag confirmed orders we haven't seen before as "new" (pulse a few sec).
       const fresh = data
         .filter((o) => o.status === "confirmed" && !seenIdsRef.current.has(o.id))
@@ -167,11 +184,14 @@ export default function AdminOrdersPage() {
       setOrders(data);
       setError("");
     } catch (e) {
+      if (reqRef.current !== reqId) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
-      isFirstLoad.current = false;
+      if (reqRef.current === reqId) {
+        setLoading(false);
+        setRefreshing(false);
+        isFirstLoad.current = false;
+      }
     }
   }, [filter]);
 
@@ -183,15 +203,20 @@ export default function AdminOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
+  // Unlock the chime on any interaction (and re-resume if the OS suspended it).
   useEffect(() => {
-    load();
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load]);
+    window.addEventListener("pointerdown", unlockChime);
+    window.addEventListener("keydown", unlockChime);
+    return () => {
+      window.removeEventListener("pointerdown", unlockChime);
+      window.removeEventListener("keydown", unlockChime);
+    };
+  }, []);
 
-  // Real-time: refetch instantly on any server-side order change (SSE). The
-  // interval above stays as a fallback if the stream drops.
-  useOrderStream(load);
+  // Real-time: refetch on any server-side order change (SSE). Polling stays as
+  // a fallback if the stream drops (paused while the tab is hidden).
+  const refresh = useLiveRefresh(load, REFRESH_MS);
+  useOrderStream(refresh);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();

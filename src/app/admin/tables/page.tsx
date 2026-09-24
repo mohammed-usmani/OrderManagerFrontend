@@ -10,7 +10,8 @@
  * Floor plan layout / CRUD (adding tables, zones, moving things) lives at /admin/floor.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toDataURL } from "qrcode";
 import { useRouter } from "next/navigation";
 import {
   api,
@@ -25,16 +26,22 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Modal, EmptyState } from "@/components/admin/ui";
 import { useOrderStream } from "@/hooks/useOrderStream";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { escapeHtml } from "@/lib/html";
+import { siteOrigin } from "@/lib/config";
 
 const REFRESH_MS = 8000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function qrUrl(token: string, size = 260): string {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const target = `${origin}/t/${token}`;
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=8&data=${encodeURIComponent(target)}`;
+/** Guest link for a table. The token is the table's credential, so the QR is
+ *  rendered locally (never sent to a third-party generator). */
+function tableLink(token: string): string | null {
+  try {
+    return `${siteOrigin()}/t/${encodeURIComponent(token)}`;
+  } catch {
+    return null; // NEXT_PUBLIC_SITE_URL missing in production
+  }
 }
 
 type TableStatus = "available" | "seated" | "bill_requested" | "inactive";
@@ -81,16 +88,9 @@ export default function AdminTablesPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  // Live polling
-  useEffect(() => {
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load]);
-
-  // Real-time refresh on settle / bill-request / status changes.
-  useOrderStream(load);
+  // Live polling, plus real-time refresh on settle / bill-request / status changes.
+  const refresh = useLiveRefresh(load, REFRESH_MS);
+  useOrderStream(refresh);
 
   const activeFloor = floors.find((f) => f.id === activeFloorId) ?? floors[0] ?? null;
 
@@ -495,7 +495,21 @@ function QrModal({
   zoneName: string;
   onClose: () => void;
 }) {
+  const link = useMemo(() => tableLink(table.qr_token), [table.qr_token]);
+  const [qrSrc, setQrSrc] = useState<string | null>(null);
+  const [qrFailed, setQrFailed] = useState(false);
+
+  useEffect(() => {
+    if (!link) return;
+    let alive = true;
+    toDataURL(link, { width: 600, margin: 2 })
+      .then((src) => { if (alive) setQrSrc(src); })
+      .catch(() => { if (alive) setQrFailed(true); });
+    return () => { alive = false; };
+  }, [link]);
+
   const print = () => {
+    if (!qrSrc) return;
     const w = window.open("", "_blank", "width=420,height=560");
     if (!w) return;
     w.document.write(`
@@ -506,9 +520,7 @@ function QrModal({
       <body>
         <h1>Saffron &amp; Smoke</h1>
         <p>${escapeHtml(zoneName)} · Table ${escapeHtml(table.label)}</p>
-        <img src="${escapeHtml(qrUrl(table.qr_token, 300))}" alt="QR"
-          onload="window.print()"
-          onerror="document.body.innerHTML+='<p style=\\'color:#a00\\'>QR could not be loaded — print manually once it appears.</p>'" />
+        <img src="${escapeHtml(qrSrc)}" alt="QR" onload="window.print()" />
         <p style="margin-top:20px">Scan to order by voice</p>
       </body></html>`);
     w.document.close();
@@ -522,30 +534,33 @@ function QrModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Close</Button>
-          <Button variant="primary" icon="print" onClick={print}>Print tent card</Button>
+          <Button variant="primary" icon="print" onClick={print} disabled={!qrSrc}>Print tent card</Button>
         </>
       }
     >
       <div className="flex flex-col items-center gap-3 py-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={qrUrl(table.qr_token)}
-          alt={`QR for table ${table.label}`}
-          onError={(e) => {
-            const img = e.currentTarget;
-            img.style.display = "none";
-            img.insertAdjacentHTML(
-              "afterend",
-              `<div class="w-56 h-56 rounded-xl border border-line bg-paper-sunken flex flex-col items-center justify-center gap-1 text-center text-xs text-ink-soft p-4"><span class="material-symbols-outlined text-[28px]">qr_code_2</span>QR generator unavailable.<br/>Link: /t/${table.qr_token}</div>`
-            );
-          }}
-          className="w-56 h-56 rounded-xl border border-line bg-white shadow-sm"
-        />
+        {qrSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={qrSrc}
+            alt={`QR for table ${table.label}`}
+            className="w-56 h-56 rounded-xl border border-line bg-white shadow-sm"
+          />
+        ) : (
+          <div className="w-56 h-56 rounded-xl border border-line bg-paper-sunken flex flex-col items-center justify-center gap-1 text-center text-xs text-ink-soft p-4">
+            <span className="material-symbols-outlined text-[28px]">qr_code_2</span>
+            {!link
+              ? "Public site URL isn't configured (NEXT_PUBLIC_SITE_URL)."
+              : qrFailed
+                ? "Couldn't generate the QR code."
+                : "Generating…"}
+          </div>
+        )}
         <p className="text-xs text-ink-soft text-center">
           Scanning opens the voice ordering app bound to{" "}
           <span className="font-semibold text-ink">{zoneName} · Table {table.label}</span>.
         </p>
-        <code className="text-[10px] text-ink-faint break-all">/t/{table.qr_token}</code>
+        <code className="text-[10px] text-ink-faint break-all">{link ?? `/t/${table.qr_token}`}</code>
       </div>
     </Modal>
   );

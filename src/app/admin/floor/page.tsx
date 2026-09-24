@@ -21,6 +21,7 @@ import { Button, Card, Input, Modal, Select, EmptyState } from "@/components/adm
 import { FloorCanvas, type CanvasTable } from "@/components/admin/FloorCanvas";
 import { BillingModal } from "@/components/admin/BillingModal";
 import { useOrderStream } from "@/hooks/useOrderStream";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 
 const REFRESH_MS = 10000;
 const ZONE_COLORS = ["#cfe8ff", "#ffe0c2", "#d6f5d6", "#f3d6f0", "#fff3bf", "#d6f0f0"];
@@ -60,16 +61,9 @@ export default function AdminFloorPage() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Live polling — paused while editing so it can't clobber un-saved drags.
-  useEffect(() => {
-    if (editing) return;
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load, editing]);
+  // Live polling — paused while editing so it can't clobber un-saved drags
+  // (and refetches once on leaving edit mode).
+  const refresh = useLiveRefresh(load, REFRESH_MS, !editing);
 
   // Real-time table status + service-request alerts. Never refresh mid-edit
   // (would clobber un-saved drags), but still surface call-waiter pings.
@@ -79,9 +73,9 @@ export default function AdminFloorPage() {
         setServiceAlert(`Table ${data.table_label ?? "?"} is asking for service`);
         window.setTimeout(() => setServiceAlert(null), 20000);
       }
-      if (!editing) load();
+      if (!editing) refresh();
     },
-    [editing, load],
+    [editing, refresh],
   );
   useOrderStream(onStream);
 
@@ -106,9 +100,8 @@ export default function AdminFloorPage() {
     setEditing(true);
   };
   const cancelEdit = () => {
-    setEditing(false);
+    setEditing(false); // useLiveRefresh reloads when editing ends
     setSelectedId(null);
-    load();
   };
   const saveLayout = async () => {
     setSaving(true);

@@ -37,6 +37,10 @@ export function BillingModal({
   const [discountReason, setDiscountReason] = useState("");
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Set once Razorpay reports success: money has moved, so Pay must never be
+  // offered again for this checkout (double-charge risk), even if verify fails.
+  const [captured, setCaptured] = useState(false);
+  const [notice, setNotice] = useState("");
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -48,7 +52,39 @@ export function BillingModal({
   }, []);
 
   const amount = base == null ? null : Math.max(0, base + tip - discount);
-  const payload = (): PaymentTargetAPI => ({ ...target, tip, discount });
+  const payload = (): PaymentTargetAPI => ({
+    ...target,
+    tip,
+    discount,
+    // Omitted (not null) when unused, so guest payloads are unchanged.
+    discount_reason: staff && discount > 0 ? discountReason.trim() || undefined : undefined,
+  });
+
+  // Verify failed after capture: retry verify and poll the bill until the
+  // server shows it paid (the Razorpay webhook may settle it meanwhile).
+  const confirmCaptured = async (verify: () => Promise<unknown>) => {
+    setNotice("Payment received — confirming…");
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      try {
+        await verify();
+        onPaid();
+        return;
+      } catch { /* fall through to the quote check */ }
+      try {
+        const q = await api.paymentQuote(target);
+        if (q.amount_due <= 0) { onPaid(); return; }
+      } catch (e) {
+        // The quote refuses with 400 once the bill is settled.
+        if (/nothing left to pay|already paid/i.test(e instanceof Error ? e.message : "")) {
+          onPaid();
+          return;
+        }
+      }
+    }
+    setNotice("");
+    setErr("Payment received, but we couldn't confirm it yet. Please ask a staff member to confirm it — don't pay again.");
+  };
 
   const payCash = async () => {
     if (!staff) return;
@@ -78,16 +114,17 @@ export function BillingModal({
         description: title,
         theme: { color: "#ff6a1a" },
         handler: async (resp) => {
+          setCaptured(true);
+          const verify = () => api.verifyRazorpay({
+            provider_order_id: co.provider_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature,
+          });
           try {
-            await api.verifyRazorpay({
-              provider_order_id: co.provider_order_id,
-              razorpay_payment_id: resp.razorpay_payment_id,
-              razorpay_signature: resp.razorpay_signature,
-            });
+            await verify();
             onPaid();
-          } catch (e) {
-            setErr(e instanceof Error ? e.message : String(e));
-            setBusy(false);
+          } catch {
+            await confirmCaptured(verify);
           }
         },
         modal: { ondismiss: () => setBusy(false) },
@@ -106,6 +143,7 @@ export function BillingModal({
   return (
     <Modal open onClose={onClose} title={title}>
       {subtitle && <p className="text-sm text-ink-soft mb-3">{subtitle}</p>}
+      {notice && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 mb-3">{notice}</div>}
       {err && <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-3">{err}</div>}
 
       <div className="space-y-3">
@@ -135,12 +173,12 @@ export function BillingModal({
 
         <div className="flex flex-col gap-2 pt-1">
           {online && (
-            <Button variant="primary" icon="qr_code_2" onClick={payOnline} disabled={busy || amount == null}>
-              {busy ? "Opening…" : "Pay online (UPI / card)"}
+            <Button variant="primary" icon="qr_code_2" onClick={payOnline} disabled={busy || captured || amount == null}>
+              {captured ? "Payment received" : busy ? "Opening…" : "Pay online (UPI / card)"}
             </Button>
           )}
           {allowCash && staff && (
-            <Button variant="secondary" icon="payments" onClick={payCash} disabled={busy || amount == null}>
+            <Button variant="secondary" icon="payments" onClick={payCash} disabled={busy || captured || amount == null}>
               Mark cash paid
             </Button>
           )}

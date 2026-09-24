@@ -1,4 +1,6 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "./config";
+
+export { API_URL };
 
 /** Fired when any apiFetch call receives a 401 — components can subscribe to force-logout. */
 export const onUnauthorized: Array<() => void> = [];
@@ -665,6 +667,7 @@ export interface PaymentTargetAPI {
   session_id?: string;
   tip?: number;
   discount?: number;
+  discount_reason?: string | null;
 }
 
 export interface RazorpayCheckoutAPI {

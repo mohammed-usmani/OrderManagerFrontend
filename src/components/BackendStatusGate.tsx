@@ -12,8 +12,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_URL } from "@/lib/config";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ENABLED = process.env.NEXT_PUBLIC_SHOW_WAKE_UP_GATE === "1";
 
 const GRACE_MS = 1800; // a warm backend answers well under this → no flash

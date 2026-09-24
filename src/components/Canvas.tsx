@@ -323,22 +323,32 @@ export function Canvas({ canvas }: { canvas: CanvasState }) {
     const isTimeLimit = canvas.reason === "time_limit";
     const isBusy = canvas.reason === "busy" || canvas.reason === "rate_limit";
     const isMicError = canvas.reason === "mic_error";
+    const isConnError = canvas.reason === "connection_error";
+    const isRefused = canvas.reason === "refused";
     const icon = isTimeLimit
       ? "timer_off"
       : isBusy
         ? "hourglass_top"
         : isMicError
           ? "mic_off"
-          : "waving_hand";
+          : isConnError
+            ? "wifi_off"
+            : isRefused
+              ? "block"
+              : "waving_hand";
     const title = isTimeLimit
       ? "That’s the call limit"
       : isBusy
         ? "All lines are busy"
         : isMicError
           ? "Microphone needed"
-          : "Until next time";
+          : isConnError
+            ? "Connection problem"
+            : isRefused
+              ? "Can’t start a call right now"
+              : "Until next time";
     const tone =
-      isTimeLimit || isBusy || isMicError ? "text-primary" : "text-tertiary";
+      isTimeLimit || isBusy || isMicError || isConnError || isRefused ? "text-primary" : "text-tertiary";
     const message =
       canvas.message ?? "Tap the mic below whenever you’re hungry again.";
     return (

@@ -35,7 +35,8 @@ function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
  * AudioContext and emit 16 kHz PCM Int16 chunks via onAudioChunk. The caller
  * acquires the stream via getUserMedia up-front (in the user's tap) so the
  * permission prompt shows immediately and denials are handled before we connect.
- * `stop()` tears down the graph and stops the stream's tracks.
+ * `stop()` tears down the graph; the caller owns (and stops) the stream, so it
+ * can be reused across reconnects.
  */
 export async function startMicCapture(
   onAudioChunk: (pcm: Uint8Array) => void,
@@ -80,7 +81,6 @@ export async function startMicCapture(
       processor.disconnect();
       source.disconnect();
       silentSink.disconnect();
-      stream.getTracks().forEach((t) => t.stop());
     },
   };
 }
