@@ -10,7 +10,7 @@ Frontend for **Saffron & Smoke**, a modern Indian restaurant in Bandra West, Mum
 
 ### Guests
 - **Landing** (`/`) — "Spice Cosmos": a three.js WebGL backdrop behind an editorial layout. Signed-in staff are sent straight to their back-office home.
-- **Voice line** (`/chat`) — the heart of the app. Tap the mic and talk; the canvas follows the agent (menu cards, customer card, delivery check, cart, confirmation, bill, order history). No account needed: the agent identifies parcel customers by a 4-digit code or phone number.
+- **Voice line** (`/chat`) — the heart of the app. Tap the mic and talk; the canvas follows the agent (menu cards, customer card, delivery check, cart, confirmation, bill, order history). No account needed: returning parcel customers are verified by their 4-digit code or phone plus the name and delivery pincode on the account.
 - **Dine-in** (`/t/[token]`) — the table's QR code opens this route, which resolves the table and sends the guest to `/chat` already seated. From there they can order by voice, **call a waiter**, **view the running tab**, and **pay from their phone** with Razorpay.
 - **Orders** (`/orders`, `/orders/[id]/confirmation`) — order history and an Indian GST tax invoice that prints as a clean A5 PDF (CGST/SGST split, amount in words, GSTIN/FSSAI header). Requires sign-in.
 
