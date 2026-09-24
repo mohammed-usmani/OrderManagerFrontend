@@ -9,28 +9,25 @@
  *  - "?" shortcut help overlay
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useAdminKeyboard } from "@/hooks/useAdminKeyboard";
 import { ADMIN_ROUTES } from "@/lib/adminRoutes";
 
-/** Returns true once the component has mounted (safe for SSR). */
-function useIsMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  return mounted;
-}
+const noSubscription = () => () => {};
 
-/** Detect macOS so we show ⌘ on Mac and Ctrl on Windows/Linux.
- *  Returns null until known so callers can render a neutral glyph and avoid
- *  the Ctrl→⌘ flip on first paint. */
-function useIsMac(): boolean | null {
-  const mounted = useIsMounted();
-  if (!mounted) return null;
+function detectMac(): boolean {
   const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
   const platform = uaData?.platform ?? navigator.userAgent;
   return /mac|iphone|ipad|ipod/i.test(platform);
+}
+
+/** Detect macOS so we show ⌘ on Mac and Ctrl on Windows/Linux.
+ *  Returns null during server render / hydration so callers can render a
+ *  neutral glyph and avoid the Ctrl→⌘ flip on first paint. */
+function useIsMac(): boolean | null {
+  return useSyncExternalStore(noSubscription, detectMac, () => null);
 }
 
 export function AdminKeyboardProvider({ children }: { children?: ReactNode }) {

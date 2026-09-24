@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useVoiceAgent } from "@/contexts/VoiceAgentContext";
@@ -18,35 +18,34 @@ export default function TableLandingPage() {
   const { setTableContext } = useVoiceAgent();
   const [error, setError] = useState("");
   const [resolving, setResolving] = useState(true);
-  const ran = useRef(false);
+  const [attempt, setAttempt] = useState(0); // bumped by "Try again"
 
-  const runResolve = useCallback(async () => {
-    if (!token) return;
-    setResolving(true);
-    setError("");
-    try {
-      const t = await api.resolveTable(token);
-      setTableContext({
-        token,
-        label: t.label,
-        zoneName: t.zone_name,
-        isAc: t.is_ac,
-      });
-      router.replace("/chat");
-    } catch {
-      setError(
-        "We couldn't find that table. Please scan the QR on your table again, or order for delivery instead.",
-      );
-      setResolving(false);
-    }
-  }, [token, setTableContext, router]);
-
-  // Resolve once on mount; the "Try again" button re-invokes runResolve directly.
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-    runResolve();
-  }, [runResolve]);
+    if (!token) return;
+    let cancelled = false; // a newer attempt (or unmount) supersedes this one
+    api
+      .resolveTable(token)
+      .then((t) => {
+        if (cancelled) return;
+        setTableContext({
+          token,
+          label: t.label,
+          zoneName: t.zone_name,
+          isAc: t.is_ac,
+        });
+        router.replace("/chat");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(
+          "We couldn't find that table. Please scan the QR on your table again, or order for delivery instead.",
+        );
+        setResolving(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, attempt, setTableContext, router]);
 
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center text-center px-6 ember-glow">
@@ -70,7 +69,11 @@ export default function TableLandingPage() {
           <p className="text-on-surface-variant text-sm leading-relaxed mb-6">{error}</p>
           <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
             <button
-              onClick={runResolve}
+              onClick={() => {
+                setResolving(true);
+                setError("");
+                setAttempt((n) => n + 1);
+              }}
               disabled={resolving}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-primary to-tertiary text-on-primary px-5 py-2.5 text-sm font-semibold hover:brightness-110 active:scale-95 transition-all disabled:opacity-60"
             >

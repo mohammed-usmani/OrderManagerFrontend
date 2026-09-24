@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, type MenuItemAPI } from "@/lib/api";
@@ -87,10 +87,23 @@ function computeOpenState(): OpenState {
   return { open: false, label: day === 0 ? "Opens Tuesday 11 AM" : "Opens 11 AM tomorrow" };
 }
 
+/** A clock that ticks once a minute. On the server it reads null, so the status
+ *  renders after hydration instead of baking the build time into the page. */
+function subscribeToMinute(onTick: () => void) {
+  const timer = setInterval(onTick, 60_000);
+  return () => clearInterval(timer);
+}
+const currentMinute = () => Math.floor(Date.now() / 60_000);
+
 export default function LandingPage() {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
-  const [openState, setOpenState] = useState<OpenState | null>(null);
+  const minute = useSyncExternalStore(subscribeToMinute, currentMinute, () => null);
+  // Live "open / closed" status in IST, refreshed each minute.
+  const openState = useMemo<OpenState | null>(
+    () => (minute === null ? null : computeOpenState()),
+    [minute],
+  );
   const [dishes, setDishes] = useState<Dish[]>(FALLBACK_DISHES);
   const [scrolled, setScrolled] = useState(false);
 
@@ -112,13 +125,6 @@ export default function LandingPage() {
     let alive = true;
     api.getMenu().then((menu) => { if (alive) setDishes(toFeatured(menu)); }).catch(() => {});
     return () => { alive = false; };
-  }, []);
-
-  // Live "open / closed" status in IST, refreshed each minute.
-  useEffect(() => {
-    setOpenState(computeOpenState());
-    const t = setInterval(() => setOpenState(computeOpenState()), 60_000);
-    return () => clearInterval(t);
   }, []);
 
   const goChat = () => router.push("/chat");

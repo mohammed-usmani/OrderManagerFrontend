@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { API_URL, onUnauthorized } from "@/lib/api";
 
 export type StaffRole = "owner" | "manager" | "cashier" | "waiter" | "chef" | "none";
@@ -44,39 +44,53 @@ function decodeJwt(token: string): AuthUser | null {
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [ready, setReady] = useState(false);
-  const logoutRef = useRef<() => void>(() => {});
+/**
+ * The JWT lives in localStorage; React reads it through useSyncExternalStore so
+ * every tab and component sees the same value without syncing it into state.
+ */
+const TOKEN_KEY = "oracle_token";
+const tokenListeners = new Set<() => void>();
 
-  // Keep logoutRef in sync so the 401 handler always calls the latest logout.
-  useEffect(() => {
-    logoutRef.current = () => {
-      setToken(null);
-      setUser(null);
-      localStorage.removeItem("oracle_token");
+const tokenStore = {
+  subscribe(listener: () => void) {
+    tokenListeners.add(listener);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === TOKEN_KEY) listener(); // signed in/out in another tab
     };
-    const handler = () => logoutRef.current();
+    window.addEventListener("storage", onStorage);
+    return () => {
+      tokenListeners.delete(listener);
+      window.removeEventListener("storage", onStorage);
+    };
+  },
+  get: () => localStorage.getItem(TOKEN_KEY),
+  /** No localStorage on the server: `undefined` means "not read yet". */
+  getServer: () => undefined,
+  set(token: string | null) {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+    tokenListeners.forEach((listener) => listener());
+  },
+};
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const stored = useSyncExternalStore(tokenStore.subscribe, tokenStore.get, tokenStore.getServer);
+  const user = useMemo(() => (stored ? decodeJwt(stored) : null), [stored]);
+  const token = user ? (stored ?? null) : null;
+
+  // Drop a stored token that's expired or malformed.
+  useEffect(() => {
+    if (stored && !user) tokenStore.set(null);
+  }, [stored, user]);
+
+  // Any 401 from the API signs the user out.
+  useEffect(() => {
+    const handler = () => tokenStore.set(null);
     onUnauthorized.push(handler);
     return () => {
       const idx = onUnauthorized.indexOf(handler);
       if (idx >= 0) onUnauthorized.splice(idx, 1);
     };
-  }, []);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("oracle_token");
-    if (stored) {
-      const decoded = decodeJwt(stored);
-      if (decoded) {
-        setToken(stored);
-        setUser(decoded);
-      } else {
-        localStorage.removeItem("oracle_token");
-      }
-    }
-    setReady(true);
   }, []);
 
   /**
@@ -105,9 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     const decoded = decodeJwt(data.access_token);
     if (!decoded) throw new Error("Invalid token received");
-    setToken(data.access_token);
-    setUser(decoded);
-    localStorage.setItem("oracle_token", data.access_token);
+    tokenStore.set(data.access_token);
     return decoded;
   };
 
@@ -117,13 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = (email: string, password: string, name: string) =>
     authRequest("/auth/register", { email, password, name }, "Registration failed");
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem("oracle_token");
-  };
+  const logout = () => tokenStore.set(null);
 
-  if (!ready) return null;
+  if (stored === undefined) return null; // server render / before the token is read
 
   return (
     <AuthContext.Provider

@@ -88,10 +88,11 @@
   --radius-xl: 2rem;
 
   /* --- Fonts --- */
-  --font-headline: "Fraunces", Georgia, serif;   /* display serif */
-  --font-body: "Hanken Grotesk", system-ui, sans-serif;
-  --font-label: "Hanken Grotesk", system-ui, sans-serif;
-  --font-mono: "Spline Sans Mono", ui-monospace, monospace;
+  /* Font files come from next/font in app/layout.tsx. */
+  --font-headline: var(--font-fraunces), Georgia, serif;   /* display serif */
+  --font-body: var(--font-hanken-grotesk), system-ui, sans-serif;
+  --font-label: var(--font-hanken-grotesk), system-ui, sans-serif;
+  --font-mono: var(--font-spline-sans-mono), ui-monospace, monospace;
 }
 
 /* ---------------- Base ---------------- */
