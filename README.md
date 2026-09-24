@@ -1,6 +1,6 @@
 # Saffron & Smoke — Client
 
-Voice-first ordering experience for **Saffron & Smoke**, a modern Indian restaurant in Bandra West, Mumbai. Customers talk to Arjun (the AI front-of-house manager); the app renders menu, cart, and order cards on a live "canvas" as the conversation happens.
+Frontend for **Saffron & Smoke**, a modern Indian restaurant in Bandra West, Mumbai. Guests order by talking to **Arjun**, the AI host, while a live "canvas" shows the menu, cart and order as the conversation happens. Staff get a role-based back-office: kitchen display, floor and tables, billing, menu, analytics and settings.
 
 > Companion backend lives in `../server/`.
 
@@ -8,19 +8,31 @@ Voice-first ordering experience for **Saffron & Smoke**, a modern Indian restaur
 
 ## What's in the box
 
-### Customer
-- **Landing** (`/`) — hero + feature strip.
-- **Auth** (`/auth/signin`, `/auth/signup`) — JWT stored in `localStorage`.
-- **Chat** (`/chat`) — the heart of the app. Big mic, idle state with "try saying" suggestion chips, and a canvas that mirrors what the agent just did (menu cards, cart, order confirmation…). Tap-to-add buttons on every dish card as a voice-free fallback.
-- **Orders** (`/orders`, `/orders/[id]/confirmation`) — history + a proper Indian-restaurant tax invoice that prints as a clean A5 PDF (CGST/SGST split, amount-in-words, GSTIN/FSSAI header).
-- **Profile** (`/profile`) — tiny; sign out lives here on mobile.
+### Guests
+- **Landing** (`/`) — "Spice Cosmos": a three.js WebGL backdrop behind an editorial layout. Signed-in staff are sent straight to their back-office home.
+- **Voice line** (`/chat`) — the heart of the app. Tap the mic and talk; the canvas follows the agent (menu cards, customer card, delivery check, cart, confirmation, bill, order history). No account needed: the agent identifies parcel customers by a 4-digit code or phone number.
+- **Dine-in** (`/t/[token]`) — the table's QR code opens this route, which resolves the table and sends the guest to `/chat` already seated. From there they can order by voice, **call a waiter**, **view the running tab**, and **pay from their phone** with Razorpay.
+- **Orders** (`/orders`, `/orders/[id]/confirmation`) — order history and an Indian GST tax invoice that prints as a clean A5 PDF (CGST/SGST split, amount in words, GSTIN/FSSAI header). Requires sign-in.
 
-### Admin (separate visual language: **light chrome, data-dense**)
-- **Dashboard** (`/admin`) — range picker, revenue (sub-total + with-charges), orders-by-status tiles, top-selling dishes table. Auto-refresh.
-- **Kitchen** (`/admin/orders`) — live orders table with filters, search, sort, expandable rows, bulk mark-paid / cancel. 15-second polling.
-- **Menu** (`/admin/menu`) — full catalog grid. Search, category filter, availability filter, sortable columns, inline cell editing, bulk enable/disable, and an Add-item modal.
+### Staff back-office (`/admin/*`, light, data-dense theme)
 
-Admins are bounced away from customer routes (`/chat`, `/orders`) into `/admin/*`.
+Staff sign in at `/auth/signin`; each role sees only its pages (`lib/adminRoutes.ts`, enforced by `AdminGuard`).
+
+| Page | What | Roles |
+|---|---|---|
+| `/admin` | Dashboard — revenue, orders by status, top dishes | owner, manager |
+| `/admin/orders` | Kitchen display — live via SSE with a new-order chime; bump, void, cancel with reason, refund | all staff |
+| `/admin/floor` | Floor map with live table status | owner, manager, cashier, waiter |
+| `/admin/tables` | Tables and their QR codes | owner, manager, cashier, waiter |
+| `/admin/menu` | Catalog, inline editing, 86 toggle and stock | owner, manager, chef |
+| `/admin/analytics` | Trends, peak hours, dine-in vs parcel | owner, manager |
+| `/admin/pricing` | Charge policy (service, AC, GST) | owner, manager |
+| `/admin/customers` | Customer records | owner, manager, cashier |
+| `/admin/service-areas` | Delivery areas | owner, manager |
+| `/admin/staff` | Staff accounts and roles | owner, manager |
+| `/admin/settings` | Restaurant profile and weekly hours | owner, manager |
+
+Cashiers settle bills from a billing modal (cash or Razorpay) and print kitchen tickets. There's a ⌘K command palette and `G`-chord keyboard shortcuts throughout the back-office.
 
 ---
 
@@ -31,9 +43,14 @@ Admins are bounced away from customer routes (`/chat`, `/orders`) into `/admin/*
 | Framework | **Next.js 16** (App Router, Turbopack) + React 19 |
 | Language | TypeScript (strict) |
 | Styling | **Tailwind CSS v4** (native `@theme`) |
-| Voice I/O | Browser Web Audio API (mic) + WebSocket to the server |
-| Frame protocol | Hand-rolled protobuf decoder for Pipecat frames (`lib/proto.ts`) |
+| Landing | three.js |
+| Voice I/O | Web Audio API (16 kHz mic in, 24 kHz playback) + WebSocket |
+| Frame protocol | Hand-rolled protobuf encoder/decoder for Pipecat frames (`lib/proto.ts`) |
+| Live kitchen | Server-Sent Events (`hooks/useOrderStream.ts`) plus polling as a backstop |
+| Payments | Razorpay Checkout (`lib/razorpay.ts`) |
 | State | React Context (Auth, VoiceAgent) — no Redux, no fetch library |
+
+> This Next.js version has breaking changes from older releases — see `AGENTS.md` before writing code.
 
 ---
 
@@ -42,41 +59,38 @@ Admins are bounced away from customer routes (`/chat`, `/orders`) into `/admin/*
 ```
 client/src/
 ├── app/
-│   ├── layout.tsx                 root shell + AuthProvider + VoiceAgentProvider
-│   ├── globals.css                tokens + print-only media queries
-│   ├── page.tsx                   landing
-│   ├── auth/signin, auth/signup   auth forms
-│   ├── chat/                      customer voice experience
-│   ├── orders/                    order list + receipt
+│   ├── layout.tsx              root shell: AuthProvider, VoiceAgentProvider, BackendStatusGate
+│   ├── page.tsx                landing
+│   ├── chat/                   voice line (+ dine-in call-waiter / tab / pay)
+│   ├── t/[token]/              dine-in QR entry
+│   ├── orders/                 order history + printable invoice
 │   ├── profile/
-│   └── admin/                     back-office (light theme)
-│       ├── page.tsx               dashboard
-│       ├── orders/page.tsx        kitchen
-│       └── menu/page.tsx          CRUD
+│   ├── auth/signin             staff and customer sign-in (signup redirects to /chat)
+│   └── admin/                  back-office pages (see table above)
 │
 ├── components/
-│   ├── AppShell.tsx               desktop sidebar + mobile bottom-nav frame
-│   ├── Sidebar.tsx                nav (switches by user role)
-│   ├── BottomNav.tsx              mobile nav (switches by role)
-│   ├── Canvas.tsx                 renders UI events (menu / cart / orders / confirmation)
-│   ├── Receipt.tsx                print-only Indian GST invoice
-│   └── admin/
-│       ├── AdminShell.tsx         light-theme wrapper
-│       ├── PageHeader.tsx         sticky header w/ quick actions
-│       └── ui.tsx                 Button, Input, Select, Card, Modal, StatusChip, Toolbar
+│   ├── Canvas.tsx              renders the voice agent's UI events
+│   ├── SpiceCosmos.tsx         three.js landing backdrop
+│   ├── Receipt.tsx             print-only GST invoice
+│   ├── BackendStatusGate.tsx   optional cold-start wait screen
+│   ├── AppShell · Sidebar · BottomNav · ErrorBoundary
+│   └── admin/                  AdminGuard, AdminShell, BillingModal, FloorCanvas,
+│                               CommandPalette, keyboard shortcuts, ui primitives
 │
 ├── contexts/
-│   ├── AuthContext.tsx            JWT decode + login/register/logout
-│   └── VoiceAgentContext.tsx      WebSocket, mic, audio player, canvas state,
-│                                  ui_event dispatcher — persists across routes
+│   ├── AuthContext.tsx         JWT (localStorage) + role
+│   └── VoiceAgentContext.tsx   ticket, WebSocket, mic, playback, canvas state,
+│                               busy-line retry — survives route changes
+│
+├── hooks/                      useOrderStream (SSE), useAdminKeyboard, useFocusTrap
 │
 └── lib/
-    ├── api.ts                     typed REST client (apiFetch + domain helpers)
-    ├── audio.ts                   startMicCapture, createAudioPlayer
-    ├── proto.ts                   Pipecat protobuf encode/decode
-    ├── datetime.ts                parse UTC, format in user's tz
-    ├── brand.ts                   restaurant identity (name, address, GSTIN, …)
-    └── amount-in-words.ts         Indian-numbering number-to-words for the bill
+    ├── api.ts                  typed REST client
+    ├── audio.ts                mic capture + audio player
+    ├── proto.ts                Pipecat protobuf frames
+    ├── adminRoutes.ts          back-office pages and their roles
+    ├── razorpay.ts             Razorpay Checkout loader
+    ├── datetime.ts · brand.ts · amount-in-words.ts
 ```
 
 ---
@@ -88,8 +102,7 @@ client/src/
 npm install
 
 # Point the app at your backend
-cp .env.example .env.local          # or create it
-cat >> .env.local <<EOF
+cat > .env.local <<EOF
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
 EOF
@@ -105,38 +118,38 @@ npm run dev
 | Name | Default | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | REST base |
-| `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000/ws` | voice WS |
-| `NEXT_PUBLIC_SHOW_WAKE_UP_GATE` | `0` | Set to `1` while the backend runs on Render's free plan. Shows a full-screen countdown until `GET /health` responds so users aren't staring at errors during the ~50 s cold-start. Remove the flag (or the entire `BackendStatusGate` component) once the backend is on an always-on plan. |
+| `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000/ws` | voice WebSocket |
+| `NEXT_PUBLIC_SHOW_WAKE_UP_GATE` | `0` | Set to `1` when the backend scales to zero (e.g. Cloud Run). Shows a full-screen countdown until `GET /health` responds, so users don't see errors during a cold start. |
 
-All three are read client-side; change them and restart `next dev` to pick up.
+All three are read client-side; restart `next dev` after changing them.
 
 ---
 
-## How the voice loop works
+## How the voice line works
 
-1. User taps the mic. `VoiceAgentContext.toggleVoice()` asks the server for a short-lived Redis ticket (`POST /auth/ws-ticket` — JWT required, also sends the IANA timezone).
-2. The client opens `ws://.../ws?ticket=…`, captures mic audio at 16 kHz mono via the Web Audio API, and streams PCM frames encoded as `AudioRawFrame` protobufs.
-3. The server runs the Pipecat pipeline (STT → LLM + tools → TTS) and sends back:
-   - **Audio frames** (PCM 24 kHz mono) — queued + played through `createAudioPlayer`.
-   - **Transcription frames** — user speech transcripts.
-   - **Text frames** — assistant speech transcripts.
-   - **MessageFrame JSON** carrying `{ kind: "ui_event", event, data }` — dispatched into the `canvas` state so cards render.
-4. Tapping the mic again ends the entire session (stops mic, closes WS, clears audio).
+1. The guest taps the mic. `VoiceAgentContext` asks the server for a short-lived ticket (`POST /auth/ws-ticket`). No login is needed. The ticket carries the guest's IANA timezone and, for dine-in, the table's QR token.
+2. The client opens `ws://…/ws?ticket=…` and streams 16 kHz mono mic audio as Pipecat `AudioRawFrame` protobufs.
+3. On the server, **Gemini Live** (native audio) listens and replies in speech, calling restaurant tools along the way. The client receives:
+   - **Audio frames** (PCM 24 kHz mono), which are queued and played.
+   - **Transcripts** of both sides.
+   - **`{ kind: "ui_event", event, data }` messages**, which update the canvas: `menu_results`, `customer_card`, `delivery_check`, `cart_view`, `order_confirmed`, `bill_requested`, `orders_list`, `time_warning`, `session_end`.
+4. If every voice line is busy, the server closes with code `4003` and the client retries automatically.
+5. Calls are capped in length. The server sends `time_warning` a minute before the end, then `session_end`. Tapping the mic again ends the call.
 
-The provider lives at the app root, so the WebSocket and canvas state survive route navigation — you can pop over to `/orders` and come back without losing the call.
+The provider lives at the app root, so the call and the canvas survive navigation.
 
 ---
 
 ## Print-only receipt
 
-The "Download Bill (PDF)" button on the confirmation page uses the browser's native print → **Save as PDF**. `Receipt.tsx` renders an Indian tax-invoice layout styled for A5 portrait; `globals.css` has a `@media print` rule that hides everything except `.receipt-print-area` so nothing but the bill makes it onto paper. No PDF library required.
+"Download Bill (PDF)" uses the browser's native print → **Save as PDF**. `Receipt.tsx` renders an Indian tax-invoice layout for A5 portrait, and a `@media print` rule in `globals.css` hides everything except `.receipt-print-area`. No PDF library required.
 
 ---
 
 ## Dev tips
 
-- Voice needs HTTPS or `localhost`. Chrome mutes `getUserMedia` otherwise.
-- Safari's WebSocket `binaryType = "arraybuffer"` works, but audio playback uses `AudioContext` — tap-to-start gestures are enforced.
-- Admin bill fields (service charge, GST) come from the **server** — never compute them client-side. `lib/brand.ts` is display-only now.
-- If you change the voice agent's tool schemas on the backend, also bump the matching TypeScript types in `contexts/VoiceAgentContext.tsx` (the `CanvasState` union).
-- Tailwind v4 sometimes nags you with "class X can be written as Y" diagnostics — they're style suggestions, not errors. The existing codebase uses the `[…]` arbitrary-value syntax consistently; match the surrounding convention.
+- Voice needs HTTPS or `localhost`; browsers block `getUserMedia` otherwise.
+- Safari enforces a user gesture before audio can play — the mic tap covers it.
+- Bill charges (service, AC, GST) always come from the **server**; never compute them client-side. `lib/brand.ts` is display-only.
+- If a backend tool's UI event changes shape, update the matching types in `contexts/VoiceAgentContext.tsx` (the `CanvasState` union).
+- Adding a back-office page? Register it in `lib/adminRoutes.ts` with its roles, so the nav, guard and command palette pick it up.
