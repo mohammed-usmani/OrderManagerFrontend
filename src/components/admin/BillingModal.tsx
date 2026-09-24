@@ -66,7 +66,7 @@ export function BillingModal({
     setBusy(true);
     setErr("");
     try {
-      const co = await api.createRazorpayCheckout(payload());
+      const co = await api.createRazorpayCheckout(payload(), token);
       await loadRazorpay();
       openRazorpay({
         key: co.key_id,
@@ -108,17 +108,20 @@ export function BillingModal({
       {err && <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-3">{err}</div>}
 
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        {/* Discounts are staff-only (the server rejects them from guests). */}
+        <div className={`grid gap-3 ${token ? "grid-cols-2" : "grid-cols-1"}`}>
           <label className="block">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Tip</span>
             <Input type="number" min={0} value={String(tip)} onChange={numField(tip, setTip)} className="w-full mt-1" />
           </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Discount</span>
-            <Input type="number" min={0} value={String(discount)} onChange={numField(discount, setDiscount)} className="w-full mt-1" />
-          </label>
+          {token && (
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Discount</span>
+              <Input type="number" min={0} value={String(discount)} onChange={numField(discount, setDiscount)} className="w-full mt-1" />
+            </label>
+          )}
         </div>
-        {discount > 0 && (
+        {token && discount > 0 && (
           <Input value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} placeholder="Reason for discount (optional)" className="w-full" />
         )}
 

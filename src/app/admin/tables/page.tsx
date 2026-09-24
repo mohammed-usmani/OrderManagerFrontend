@@ -26,6 +26,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Modal, EmptyState } from "@/components/admin/ui";
 import { useOrderStream } from "@/hooks/useOrderStream";
+import { escapeHtml } from "@/lib/html";
 
 const REFRESH_MS = 8000;
 
@@ -504,14 +505,14 @@ function QrModal({
     const w = window.open("", "_blank", "width=420,height=560");
     if (!w) return;
     w.document.write(`
-      <html><head><title>Table ${table.label} — QR</title>
+      <html><head><title>Table ${escapeHtml(table.label)} — QR</title>
       <style>body{font-family:Georgia,serif;text-align:center;padding:40px}
       h1{font-size:22px;margin:0 0 4px}p{color:#666;margin:0 0 20px}
       img{width:300px;height:300px}</style></head>
       <body>
         <h1>Saffron &amp; Smoke</h1>
-        <p>${zoneName} · Table ${table.label}</p>
-        <img src="${qrUrl(table.qr_token, 300)}" alt="QR"
+        <p>${escapeHtml(zoneName)} · Table ${escapeHtml(table.label)}</p>
+        <img src="${escapeHtml(qrUrl(table.qr_token, 300))}" alt="QR"
           onload="window.print()"
           onerror="document.body.innerHTML+='<p style=\\'color:#a00\\'>QR could not be loaded — print manually once it appears.</p>'" />
         <p style="margin-top:20px">Scan to order by voice</p>

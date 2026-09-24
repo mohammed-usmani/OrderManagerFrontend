@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { Button, Card, Input, Modal, Pager, StatusChip, Toolbar, EmptyState } from "@/components/admin/ui";
 import { useOrderStream } from "@/hooks/useOrderStream";
 import { BillingModal } from "@/components/admin/BillingModal";
+import { escapeHtml } from "@/lib/html";
 
 // Short two-tone chime for newly-arrived orders (WebAudio — no asset needed).
 function ding() {
@@ -44,20 +45,22 @@ function ding() {
 function printKOT(order: AdminOrderAPI) {
   const w = window.open("", "_blank", "width=340,height=620");
   if (!w) return;
+  // Everything interpolated below is escaped: item names and customer notes
+  // are user text, and this window shares the app's origin.
   const where = order.order_type === "dine_in"
-    ? `Table ${order.table_label ?? "?"}${order.zone_name ? ` · ${order.zone_name}` : ""}`
+    ? `Table ${escapeHtml(order.table_label ?? "?")}${order.zone_name ? ` · ${escapeHtml(order.zone_name)}` : ""}`
     : "PARCEL / DELIVERY";
   const rows = order.items
     .filter((i) => i.status !== "voided")
-    .map((i) => `<tr><td class="q">${i.quantity}×</td><td>${i.name}${i.special_instructions ? `<br/><i>${i.special_instructions}</i>` : ""}</td></tr>`)
+    .map((i) => `<tr><td class="q">${escapeHtml(i.quantity)}×</td><td>${escapeHtml(i.name)}${i.special_instructions ? `<br/><i>${escapeHtml(i.special_instructions)}</i>` : ""}</td></tr>`)
     .join("");
   w.document.write(
-    `<html><head><title>KOT ${order.id.slice(0, 8)}</title><style>` +
+    `<html><head><title>KOT ${escapeHtml(order.id.slice(0, 8))}</title><style>` +
     `body{font-family:monospace;padding:10px;width:300px;color:#000}h2{margin:0 0 2px;letter-spacing:2px}` +
     `.meta{font-size:12px;margin-bottom:6px}table{width:100%;border-collapse:collapse;font-size:14px}` +
     `td{padding:4px 0;vertical-align:top;border-bottom:1px dashed #999}.q{width:32px;font-weight:bold}i{color:#444;font-size:12px}` +
     `</style></head><body onload="window.print()">` +
-    `<h2>KOT</h2><div class="meta">${where}<br/>#${order.id.slice(0, 8).toUpperCase()} · ${new Date().toLocaleTimeString()}</div>` +
+    `<h2>KOT</h2><div class="meta">${where}<br/>#${escapeHtml(order.id.slice(0, 8).toUpperCase())} · ${new Date().toLocaleTimeString()}</div>` +
     `<table>${rows}</table></body></html>`,
   );
   w.document.close();

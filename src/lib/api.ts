@@ -299,9 +299,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  createRazorpayCheckout: (body: PaymentTargetAPI) =>
+  /** Public for guests; staff pass their token so a discount is accepted. */
+  createRazorpayCheckout: (body: PaymentTargetAPI, token?: string | null) =>
     apiFetch<RazorpayCheckoutAPI>("/payments/razorpay/order", {
       method: "POST",
+      token: token ?? undefined,
       body: JSON.stringify(body),
     }),
   verifyRazorpay: (body: {
