@@ -22,6 +22,8 @@ import { FloorCanvas, type CanvasTable } from "@/components/admin/FloorCanvas";
 import { BillingModal } from "@/components/admin/BillingModal";
 import { useOrderStream } from "@/hooks/useOrderStream";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { useAuth } from "@/contexts/AuthContext";
+import { isCashierRole } from "@/lib/adminRoutes";
 
 const REFRESH_MS = 10000;
 const ZONE_COLORS = ["#cfe8ff", "#ffe0c2", "#d6f5d6", "#f3d6f0", "#fff3bf", "#d6f0f0"];
@@ -30,6 +32,7 @@ const ZONE_COLORS = ["#cfe8ff", "#ffe0c2", "#d6f5d6", "#f3d6f0", "#fff3bf", "#d6
 type Draft = { pos_x: number | null; pos_y: number | null; shape: TableShape | null; zone_id: string };
 
 export default function AdminFloorPage() {
+  const { user } = useAuth();
 
   const [floors, setFloors] = useState<FloorMapFloorAPI[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -330,7 +333,7 @@ export default function AdminFloorPage() {
           <BillingModal
             target={{ session_id: billingSession }}
             title="Settle table"
-            staff
+            staff={isCashierRole(user?.role)}
             onClose={() => setBillingSession(null)}
             onPaid={() => { setBillingSession(null); load(); }}
           />

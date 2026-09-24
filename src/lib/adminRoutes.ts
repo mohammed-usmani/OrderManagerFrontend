@@ -43,6 +43,13 @@ export function isStaffRole(role: StaffRole | undefined | null): boolean {
   return !!role && STAFF_ROLE_SET.has(role);
 }
 
+/** Roles the server lets take payments and give discounts (its CASHIER_ROLES). */
+const CASHIER_ROLE_SET = new Set<StaffRole>(["owner", "manager", "cashier"]);
+
+export function isCashierRole(role: StaffRole | undefined | null): boolean {
+  return !!role && CASHIER_ROLE_SET.has(role);
+}
+
 /** Routes visible to a given role. */
 export function routesForRole(role: StaffRole | undefined | null): AdminRoute[] {
   if (!role) return [];

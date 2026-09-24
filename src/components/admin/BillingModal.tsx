@@ -76,7 +76,7 @@ export function BillingModal({
         if (q.amount_due <= 0) { onPaid(); return; }
       } catch (e) {
         // The quote refuses with 400 once the bill is settled.
-        if (/nothing left to pay|already paid/i.test(e instanceof Error ? e.message : "")) {
+        if (/nothing left to pay|already paid|already closed/i.test(e instanceof Error ? e.message : "")) {
           onPaid();
           return;
         }

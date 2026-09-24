@@ -12,6 +12,8 @@ import { useOrderStream } from "@/hooks/useOrderStream";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { BillingModal } from "@/components/admin/BillingModal";
 import { escapeHtml } from "@/lib/html";
+import { useAuth } from "@/contexts/AuthContext";
+import { isCashierRole } from "@/lib/adminRoutes";
 
 // Short two-tone chime for newly-arrived orders (WebAudio — no asset needed).
 // Browsers keep an AudioContext made without a user gesture suspended (silent),
@@ -115,6 +117,7 @@ const STATUS_VERB: Partial<Record<OrderStatus, string>> = {
 const REFRESH_MS = 15000;
 
 export default function AdminOrdersPage() {
+  const { user } = useAuth();
 
   const [filter, setFilter]     = useState<Filter>("active");
   const [orders, setOrders]     = useState<AdminOrderAPI[]>([]);
@@ -868,7 +871,7 @@ export default function AdminOrdersPage() {
             target={{ order_id: payTarget.id }}
             title={`Take payment · #${payTarget.id.slice(0, 8).toUpperCase()}`}
             subtitle={payTarget.order_type === "dine_in" ? `Table ${payTarget.table_label ?? "?"}` : payTarget.customer_name || undefined}
-            staff
+            staff={isCashierRole(user?.role)}
             onClose={() => setPayTarget(null)}
             onPaid={() => { setPayTarget(null); load(); }}
           />
