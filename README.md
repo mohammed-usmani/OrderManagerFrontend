@@ -2,7 +2,7 @@
 
 Frontend for **Saffron & Smoke**, a modern Indian restaurant in Bandra West, Mumbai. Guests order by talking to **Arjun**, the AI host, while a live "canvas" shows the menu, cart and order as the conversation happens. Staff get a role-based back-office: kitchen display, floor and tables, billing, menu, analytics and settings.
 
-> Companion backend lives in `../server/`.
+> Companion backend: [OrderManagerBackend](https://github.com/mohammed-usmani/OrderManagerBackend). Live: [order-manager-frontend.vercel.app](https://order-manager-frontend.vercel.app)
 
 ---
 
